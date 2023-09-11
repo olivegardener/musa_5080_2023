@@ -43,13 +43,13 @@ palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
 ```{r results='hide'}
 census_api_key("a3ebdf1648b7fb21df55df7246d9642f040c0ee0", overwrite = TRUE)
 
-tracts16 <-  
+tracts09 <-  
   get_acs(geography = "tract",
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
                         "B19013_001E", "B25058_001E",
                         "B06012_002E"), 
-          year=2016, state=06,
+          year=2009, state=06,
           county=075, geometry=TRUE) %>% 
   st_transform('EPSG:7132')
 ```
@@ -70,24 +70,24 @@ sf_county_sf <- st_cast(sf_county_sf, "POLYGON")
 sf_county_sf <- sf_county_sf[which.max(st_area(sf_county_sf)), ] %>% 
   st_transform('EPSG:7132')
 
-# Create a logical vector where TRUE means the tract intersects with babybaby
-intersects_with <- st_intersects(tracts16, sf_county_sf, sparse = FALSE) %>% apply(1, any)
+# Create a logical vector where TRUE means the tract intersects with sf_county_sf
+intersects_with <- st_intersects(tracts09, sf_county_sf, sparse = FALSE) %>% apply(1, any)
 
 # Subset tracts_sf with the logical vector
-tracts16 <- tracts16[intersects_with, ]
+tracts09 <- tracts09[intersects_with, ]
 
 ```
 
 Let's examine each variable and the elements of an sf object
 
 ```{r}
-glimpse(tracts16)
+glimpse(tracts09)
 ```
 
 We create a new data frame consisting only of population
 
 ```{r}
-totalPop16 <- tracts16 %>%
+totalPop09 <- tracts09 %>%
   filter(variable == "B25026_001")
 ```
 
@@ -106,28 +106,28 @@ version used in the text book so the results may appear different.)
 ```{r plots}
 A <- 
   ggplot() +
-  geom_sf(data = totalPop16, aes(fill = estimate)) +
+  geom_sf(data = totalPop09, aes(fill = estimate)) +
   theme(
     plot.title = element_text(size=22))
 
 B <- 
   ggplot() +
-  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  geom_sf(data = totalPop09, aes(fill = q5(estimate))) +
   theme(plot.title = element_text(size=22)) 
 
 C <-
   ggplot() +
-  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  geom_sf(data = totalPop09, aes(fill = q5(estimate))) +
   scale_fill_manual(values = palette5,
-                    labels = qBr(totalPop16, "estimate"),
+                    labels = qBr(totalPop09, "estimate"),
                     name = "Total\nPopluation\n(Quintile Breaks)") +
   theme(plot.title = element_text(size=22))
 
 D <- 
   ggplot() +
-  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  geom_sf(data = totalPop09, aes(fill = q5(estimate))) +
   scale_fill_manual(values = palette5,
-                    labels = qBr(totalPop16, "estimate"),
+                    labels = qBr(totalPop09, "estimate"),
                     name = "Popluation\n(Quintile Breaks)") +
   labs(title = "Total Population", subtitle = "Philadelphia; 2016") +
   mapTheme() + 
@@ -146,8 +146,8 @@ frames.
 ```{r}
 # Let's "spread" the data into wide form
 
-tracts16 <- 
-  tracts16 %>%
+tracts09 <- 
+  tracts09 %>%
   dplyr::select( -NAME, -moe) %>%
   spread(key = variable, value = estimate) %>%
   rename(TotalPop = B25026_001, 
@@ -161,12 +161,12 @@ tracts16 <-
 
 # Let's create new rate variables using mutate
 
-tracts16 <- 
-  tracts16 %>%
+tracts09 <- 
+  tracts09 %>%
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop, 0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2016") %>%
+         year = "2009") %>%
   dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
 ```
 
@@ -183,13 +183,13 @@ split the use of `get_acs()` to download the data from the use of
 into one continuous sequence of code using the "pipe" operator `%>%`.
 
 ```{r results='hide'}
-tracts20 <- 
+tracts17 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2020, state=42, county=101, 
+          year=2017, state=06, county=075, 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:7132') %>%
   rename(TotalPop = B25026_001E, 
@@ -203,7 +203,7 @@ tracts20 <-
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2020") %>%
+         year = "2017") %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
@@ -215,7 +215,7 @@ this lab.
 
 ```{r}
 
-allTracts <- rbind(tracts16,tracts20)
+allTracts <- rbind(tracts09,tracts17)
 ```
 
 ### Wrangling Transit Open Data
