@@ -63,7 +63,7 @@ You will need a "key" to access the Census API. You can find one at [their websi
 Paste it into the code block below:
 
 ```{r load_key, warning = FALSE, eval = FALSE}
-census_api_key("YOUR KEY GOES HERE", overwrite = TRUE)
+census_api_key("a3ebdf1648b7fb21df55df7246d9642f040c0ee0", overwrite = TRUE)
 ```
 
 ## Load census data dictionaries
@@ -222,6 +222,13 @@ Use the `mutate` command to create three new variables in your allACS data set. 
 
 If you want, you can put some new variables in your ACS data sets by adding to `acs_vars` - just make sure you put something in the `rename` commands we used earlier if you want to have intelligible variable names.
 
+```{r do_mutates, cache = TRUE}
+allACS <- allACS %>%
+  mutate(change_population = total_pop.2020 - total_pop.2016, 
+         change_vacancy_Pct = vacancyPct.2020 - vacancyPct.2016)
+
+```
+
 # Summarizing Census Data
 
 ## Exploring central tendancies
@@ -294,7 +301,7 @@ Let's say you are a planner working for the City, and you are creating a neighbo
 
 Let's start by making a vector that has the GEOIDs of census tracts in Mt. Airy. The allACS$GEOID column is a CHARACTER, not a number, athough it appears numeric.
 
-We can then create a vactor variable, which we call `mtAiry`, using a "boolean" statement.
+We can then create a vector variable, which we call `mtAiry`, using a "boolean" statement.
 
 We say that if a tract has a GEOID in `myTracts`, the variable `mtAiry` should take on a value of "MT AIRY", or else it takes on a value of "REST OF PHILADELPHIA"
 
@@ -408,27 +415,6 @@ Notice that there is a `geometry` column in our data frame now - it's actually a
 
 Observe the use of the `%>%` operator here - I'm going to chain all of our operations together into one big chunk of code:
 
-```{r spatial_tidycensus, message=FALSE, warning=FALSE, cache=TRUE, include=FALSE}
-acsTractsPHL.2020.sf <- get_acs(geography = "tract",
-                             year = 2020, 
-                             variables = acs_vars, 
-                             geometry = TRUE, 
-                             state = "PA", 
-                             county = "Philadelphia", 
-                             output = "wide") %>% 
-  dplyr::select (GEOID, NAME, all_of(acs_vars)) %>%
-  rename (total_pop.2020 = B01001_001E,
-          total_HU.2020 = B25002_001E,
-          total_vacant.2020 = B25002_003E,
-          med_HH_Income.2020 = B19013_001E,
-          total_White.2020 = B02001_002E,
-          total_GradDeg.2020 = B06009_006E) %>%
-  mutate(vacancyPct.2020 = total_vacant.2020/total_HU.2020,
-         pctWhite.2020 = total_White.2020/total_pop.2020) %>%
-  mutate(mtAiry = ifelse(GEOID %in% myTracts, "MT AIRY", "REST OF PHILADELPHIA")) %>%
-  st_as_sf(crs = 4326) # Turn shp into sf object and project as WGS84
-```
-
 ```{r spatial_tidycensus_no_eval, message=FALSE, warning=FALSE, cache=TRUE, eval = FALSE}
 acsTractsPHL.2020.sf <- get_acs(geography = "tract",
                              year = 2020, 
@@ -449,6 +435,8 @@ acsTractsPHL.2020.sf <- get_acs(geography = "tract",
   mutate(mtAiry = ifelse(GEOID %in% myTracts, "MT AIRY", "REST OF PHILADELPHIA")) %>%
   st_as_sf(crs = 4326) # Turn shp into sf object and project as WGS84
 ```
+
+
 
 Now we can create a a `geom_sf` which will allow you to map `sf` objects in `ggplot2` so long as they are have their projection set to WGS84 (aka web mercator). You can see above that we took the shapefile created by the tidycensus call and used the `st_as_sf` call to turn it into an `sf` object and set the `crs` (coordinate reference system) to `4326`, which is the code for WGS84. You can find all these kinds of codes at [spatialreference.org](http://spatialreference.org).
 
@@ -484,5 +472,75 @@ ggplot()+
 - Can you think of any other ways to subdivide the data we looked at in class to glean more insights about Mt. Airy?
 
 # Assignment
+
+1. a ggplot plot city-wide - number of vacant housing units per tract in 2020 as a function of vacant housing units in 2016,  (change in raw housing units, so 2020-2016, using "B25002_003E", # Number of vacant housing units", which is part of the `acs_vars` vector). Use the ggplot "color" parameter in the geom_point aesthetics to visualize which are the Mt. Airy tracts.  Annotate this plot with a single sentence describing what it shows (not as a plot title, but within the markdown).
+
+```{r ggplot_point1, warning = FALSE, cache = TRUE}
+ggplot(allACS)+
+  geom_point(aes(x =total_vacant.2016 * 1.08, 
+                 y = total_vacant.2020,
+                 color = mtAiry))+
+  geom_abline(intercept = 0, slope = 1)+
+  labs(
+    title = "2020 vacant housing units per tract a Function of 2016 vacant housing units per tract",
+    caption = "Data: US Census Bureau, ACS 5-year estimates",
+    x="Vacant Housing Units per Tract 2016", 
+    y="Vacant Housing Units per Tract 2020")
+  
+```
+
+This plot shows vacant housing units per tract in 2016 vs 2020. From this plot, we can see generally...
+
+
+2. A ggplot map symbolizing the number of vacant housing units in 2016 as a percentage of total housing units (e.g.  "total_HU.2016") on a per-tract basis. Outline the Mt. Airy neighborhood on the map. Annotate this map with a single sentence describing what it shows or implies about Mt Airy and Philadelphia.
+
+```{r ggplot_geom_sf, warning = FALSE, cache = TRUE}
+acsTractsPHL.2016.sf <- get_acs(geography = "tract",
+                             year = 2016, 
+                             variables = acs_vars, 
+                             geometry = TRUE, 
+                             state = "PA", 
+                             county = "Philadelphia", 
+                             output = "wide") %>% 
+  dplyr::select (GEOID, NAME, all_of(acs_vars)) %>%
+  rename (total_pop.2016 = B01001_001E,
+          total_HU.2016 = B25002_001E,
+          total_vacant.2016 = B25002_003E,
+          med_HH_Income.2016 = B19013_001E,
+          total_White.2016 = B02001_002E,
+          total_GradDeg.2016 = B06009_006E) %>%
+  mutate(vacancyPct.2016 = total_vacant.2016/total_HU.2016) %>%
+  mutate(mtAiry = ifelse(GEOID %in% myTracts, "MT AIRY", "REST OF PHILADELPHIA")) %>%
+  st_as_sf(crs = 4326) # Turn shp into sf object and project as WGS84
+
+ggplot()+
+  geom_sf(data = acsTractsPHL.2016.sf, aes(fill = vacancyPct.2016),
+          color = "transparent")+
+  geom_sf(data = acsTractsPHL.2016.sf %>%
+            filter(mtAiry == "MT AIRY") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent")+
+  labs(
+    title = "Vacancy Percent by Tract",
+    subtitle = "",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+  
+```
+
+3. Create a code chunk that renders a "kable" table showing a summary of mean number of vacant housing units per tract for Mt. Airy vs. the rest Philadelphia as a whole in 2020.  Annotate this plot with a single sentence describing what it shows or implies about the data.Install the kable and kableExtra packages to do this - there is a simple tutorial on that here: https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_html.html
+```{r}
+kabletable <- allACS %>%
+  group_by(mtAiry) %>%
+  summarise(Vacant_Mean = mean(total_vacant.2020, na.rm = TRUE))
+
+# Create a kable table
+kable(kabletable)
+```
+
+
+
+4. Styling: Manipulate the code chunks so that you "fold" them in the final markdown (you might need to google how to do this). Title the markdown "Tidycensus Markdown", put your name and date in the header. Remove any extraneous tables and text from the original markdown that aren't needed. Adjust the table of contents as needed to include your new sections.
+
 
 - Check the class canvas page to see how this particular markdown needs to be edited to form your first assignment. If there is time in class, begin the assignment!
