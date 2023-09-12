@@ -54,35 +54,28 @@ tracts09 <-
   st_transform('EPSG:7132')
 ```
 
-Filter out census tracts that do not share edges with other tracts (remove islands)
-```{r spatial filtering}
-# Get the shapefile for San Francisco County
-sf_county <- tigris::counties(state = "CA", cb = TRUE) %>%
-  filter(NAME == "San Francisco")
+Filter out Farralon Islands fo 2009
+```{r Filter Farralon 1}
+# Calculate the centroids
+centroids <- st_centroid(tracts09)
 
-# Convert to sf object
-sf_county_sf <- st_as_sf(sf_county)
+# Extract the centroid coordinates
+coords <- st_coordinates(centroids)
 
-# Convert mutipolygon to polygon
-sf_county_sf <- st_cast(sf_county_sf, "POLYGON")
+# Add the coordinates as new columns
+tracts09$lon <- coords[, "X"]
+tracts09$lat <- coords[, "Y"]
 
-# Keep only the largest one
-sf_county_sf <- sf_county_sf[which.max(st_area(sf_county_sf)), ] %>% 
-  st_transform('EPSG:7132')
+min_lon <- min(tracts09$lon)
 
-# Create a logical vector where TRUE means the tract intersects with sf_county_sf
-intersects_with <- st_intersects(tracts09, sf_county_sf, sparse = FALSE) %>% apply(1, any)
+tracts09 <- tracts09 %>%
+   filter(lon > min_lon)
 
-# Subset tracts_sf with the logical vector
-tracts09 <- tracts09[intersects_with, ]
+tracts09 <- tracts09 %>%
+  select(-lat, -lon)
 
 ```
 
-Let's examine each variable and the elements of an sf object
-
-```{r}
-glimpse(tracts09)
-```
 
 We create a new data frame consisting only of population
 
@@ -132,6 +125,8 @@ D <-
   labs(title = "Total Population", subtitle = "Philadelphia; 2016") +
   mapTheme() + 
   theme(plot.title = element_text(size=22))
+
+A
 ```
 
 ### Working with ACS Data
@@ -170,10 +165,7 @@ tracts09 <-
   dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
 ```
 
-Tracts 2016 is now complete. Let's grab 2020 tracts and do the same
-thing.
-
-### 2020 Census Data
+### 2017 Census Data
 
 Notice that we are getting "wide" data here in the first place This
 saves us the trouble of using "spread". We do this by using the
@@ -205,6 +197,28 @@ tracts17 <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
          year = "2017") %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+Filter out Farralon Islands fo 2017
+```{r Filter Farralon 2}
+# Calculate the centroids
+centroids <- st_centroid(tracts17)
+
+# Extract the centroid coordinates
+coords <- st_coordinates(centroids)
+
+# Add the coordinates as new columns
+tracts17$lon <- coords[, "X"]
+tracts17$lat <- coords[, "Y"]
+
+min_lon <- min(tracts17$lon)
+
+tracts17 <- tracts17 %>%
+   filter(lon > min_lon)
+
+tracts17 <- tracts17 %>%
+  select(-lat, -lon)
+
 ```
 
 To combine the 2016 and 2020 data into the same data frame we use
@@ -245,11 +259,10 @@ Let's visualize it
 ```{r}
 
 ggplot() + 
-  geom_sf(data=st_union(MUNI_Stops)) +
-  geom_sf(data=MUNI_Stops, 
-          aes(colour = Line), 
-          show.legend = "point", size= 2) +
-  scale_colour_manual(values = c("orange","blue")) +
+  geom_sf(data=st_union(MUNI_Stops_sf, size= 0.5)) +
+  geom_sf(data=MUNI_Stops_sf, 
+          aes(colour = serviceplanningstoptype), 
+          show.legend = "point", size= 0.5) +
   labs(title="MUNI Stops", 
        subtitle="San Francisco, CA", 
        caption="Figure 2.5") +
