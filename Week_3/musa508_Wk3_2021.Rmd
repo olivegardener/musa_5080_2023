@@ -33,6 +33,8 @@ library(grid)
 library(knitr)
 library(kableExtra)
 library(rmarkdown)
+library(ggrepel)
+
 ```
 
 ## Load Themes
@@ -52,7 +54,7 @@ source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-L
 ## Load Census API Key
 
 ```{r load_api_key, message=FALSE, warning=FALSE}
-census_api_key("YOUR API KEY", overwrite = TRUE)
+census_api_key("a3ebdf1648b7fb21df55df7246d9642f040c0ee0", overwrite = TRUE)
 ```
 
 # Load the data
@@ -94,7 +96,7 @@ Make some simple ggplots with `geom_sf` by mapping the municipalities, the Lanca
 ```{r first_maps}
 ggplot()+
   geom_sf(data = studyAreaTowns, aes(fill = MUNI))+
-  geom_sf(data = uga, fill = "transparent", color = "red")+
+  geom_sf(data = uga, fill = "transparent", color = "red") +
   mapTheme()
 ```
 
@@ -106,7 +108,7 @@ We are going to do some meat-and-potatoes vector GIS - union and buffer.
 
 Merging all the shapes. The use of `st_buffer(1)` is to add a little bit of room (here it is 1ft) to consolidates small inconsistencies in the outline of each UGA polygon. These occur when digitizing polygons is not perfectly done; and rarely is it perfect!
 
-
+Smoothing
 ```{r union}
 uga_union <- 
   st_union(uga) %>%
@@ -170,3 +172,22 @@ Consider how you might label objects in your map using
 Think about ways to manipulate the `studyAreaTowns` data inside that text geom to make it more legible.
 
 Put all this code into a markdown chunk that runs correctly and allows this markdown to `knit`. Then see if you can manipulate the chunk options so that there aren't annoying warnings and other messages you don't want showing up in an assignment.
+
+```{r}
+buffersAndTowns2 <- buffersAndTowns %>% 
+  filter(Legend == "Inside")
+
+# Calculate label positions (this is a simple example; you may need to adjust these)
+buffersAndTowns2$label_x <- st_coordinates(st_centroid(buffersAndTowns2$geometry))[, 1]
+buffersAndTowns2$label_y <- st_coordinates(st_centroid(buffersAndTowns2$geometry))[, 2]
+
+ggplot() + 
+  geom_sf(data = buffersAndTowns, aes(fill = MUNI, alpha = Legend)) +
+  scale_alpha_manual(values = c("Inside" = 0.5, "Outside" = 1)) +
+  geom_label_repel(data = buffersAndTowns2, aes(x = buffersAndTowns2$label_x, y = buffersAndTowns2$label_y, label = MUNI), 
+                      box.padding = 0.1,
+                      size = 1, color = "black") +
+  labs(title = "Buffers and Towns") +
+  mapTheme()
+```
+

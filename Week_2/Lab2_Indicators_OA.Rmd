@@ -257,10 +257,27 @@ MUNI_Stops_sf <- st_as_sf(MUNI_Stops, coords = c("lon", "lat"), crs = 7132)
 Let's visualize it
 
 ```{r}
-
 ggplot() + 
   geom_sf(data=st_union(MUNI_Stops_sf, size= 0.5)) +
   geom_sf(data=MUNI_Stops_sf, 
+          aes(colour = serviceplanningstoptype), 
+          show.legend = "point", size= 0.5) +
+  labs(title="MUNI Stops", 
+       subtitle="San Francisco, CA", 
+       caption="Figure 2.5") +
+  mapTheme()
+```
+
+```{r}
+
+# Create a subset where serviceplanningstoptype is "SP"
+LightRailStops <- subset(MUNI_Stops_sf, serviceplanningstoptype == "SI")
+
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data=LightRailStops, 
           aes(colour = serviceplanningstoptype), 
           show.legend = "point", size= 0.5) +
   labs(title="MUNI Stops", 
