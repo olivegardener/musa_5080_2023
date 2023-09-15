@@ -151,7 +151,8 @@ tracts09 <-
          MaleBachelors = B15001_009,
          MedHHInc = B19013_001, 
          MedRent = B25058_001,
-         TotalPoverty = B06012_002)
+         TotalPoverty = B06012_002) %>% 
+  mutate(area = st_area(geometry))
 
 
 # Let's create new rate variables using mutate
@@ -161,7 +162,7 @@ tracts09 <-
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop, 0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2009") %>%
+         year = "2009", density = (TotalPop / (area * 0.00000003587 ))) %>%
   dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
 ```
 
@@ -190,12 +191,13 @@ tracts17 <-
          MaleBachelors = B15001_009E,
          MedHHInc = B19013_001E, 
          MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>%
+         TotalPoverty = B06012_002E) %>% 
+  mutate(area = st_area(geometry)) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2017") %>%
+         year = "2017", density = (TotalPop / (area * 0.00000003587 ))) %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
@@ -235,18 +237,30 @@ allTracts <- rbind(tracts09,tracts17)
 ### Wrangling Transit Open Data
 
 ```{r}
+BART_Stops <- st_read("/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_2/data/BART_Sta_13.shp")
 
-MUNI_Stops <- read.socrata(
-  "https://data.sfgov.org/resource/i28k-bkz6.json",
-  app_token = "fpOaceiSu5zHVOar6s6P4xNah",
-  email     = "oatwood@upenn.edu",
-  password  = "viqZi4-jucpuh-zimhas"
-)
-
-MUNI_Stops_sf <- st_as_sf(MUNI_Stops, coords = c("longitude", "latitude"), crs = 4326)
-
-MUNI_Stops_sf <- MUNI_Stops_sf %>%
+BART_Stops <- BART_Stops %>%
   st_transform(2227)
+
+sf_outline <- st_union(tracts09)
+
+# Find the points that are within the boundary
+indices <- st_within(BART_Stops, sf_outline, sparse = FALSE)
+
+# Create a new sf object containing only the points within the boundary
+BART_Stops_SF <- BART_Stops[as.vector(indices), ]
+
+# MUNI_Stops <- read.socrata(
+#   "https://data.sfgov.org/resource/i28k-bkz6.json",
+#   app_token = "fpOaceiSu5zHVOar6s6P4xNah",
+#   email     = "oatwood@upenn.edu",
+#   password  = "viqZi4-jucpuh-zimhas"
+# )
+# 
+# MUNI_Stops_sf <- st_as_sf(MUNI_Stops, coords = c("longitude", "latitude"), crs = 4326)
+# 
+# MUNI_Stops_sf <- MUNI_Stops_sf %>%
+#   st_transform(2227)
 ```
 
 
@@ -254,11 +268,11 @@ Let's visualize it
 
 ```{r}
 ggplot() + 
-  geom_sf(data=st_union(MUNI_Stops_sf, size= 0.5)) +
-  geom_sf(data=MUNI_Stops_sf, 
-          aes(colour = serviceplanningstoptype), 
+  geom_sf(data=st_union(BART_Stops_SF, size= 0.5)) +
+  geom_sf(data=BART_Stops_SF, 
+          aes(colour = STATION), 
           show.legend = "point", size= 0.5) +
-  labs(title="MUNI Stops", 
+  labs(title="BART Stops", 
        subtitle="San Francisco, CA", 
        caption="Figure 2.5") +
   mapTheme()
@@ -266,20 +280,20 @@ ggplot() +
 
 ```{r}
 
-# Create a subset where serviceplanningstoptype is "SP"
-LightRailStops <- subset(MUNI_Stops_sf, serviceplanningstoptype == "SI")
+# # Create a subset where serviceplanningstoptype is "SP"
+# LightRailStops <- subset(BART_Stops_SF, serviceplanningstoptype == "SI")
 
 ```
 
 ```{r}
-ggplot() + 
-  geom_sf(data=LightRailStops, 
-          aes(colour = serviceplanningstoptype), 
-          show.legend = "point", size= 0.5) +
-  labs(title="MUNI Stops", 
-       subtitle="San Francisco, CA", 
-       caption="Figure 2.5") +
-  mapTheme()
+# ggplot() + 
+#   geom_sf(data=LightRailStops, 
+#           aes(colour = serviceplanningstoptype), 
+#           show.legend = "point", size= 0.5) +
+#   labs(title="MUNI Stops", 
+#        subtitle="San Francisco, CA", 
+#        caption="Figure 2.5") +
+#   mapTheme()
 ```
 
 ### Relating SEPTA Stops and Tracts
@@ -294,12 +308,12 @@ We put them in the same data frame... why?
 
 ```{r}
 
-LightRailBuffers <- 
+BART_Stops_Buffers <- 
   rbind(
-    st_buffer(LightRailStops, 2640) %>%
+    st_buffer(BART_Stops_SF, 2640) %>%
       mutate(Legend = "Buffer") %>%
       dplyr::select(Legend),
-    st_union(st_buffer(LightRailStops, 2640)) %>%
+    st_union(st_buffer(BART_Stops_SF, 2640)) %>%
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
 ```
@@ -312,8 +326,8 @@ geographic area. We accomplish this by using the `facet_wrap()`
 
 ```{r}
 ggplot() +
-  geom_sf(data=LightRailBuffers) +
-  geom_sf(data=LightRailStops, show.legend = "point") +
+  geom_sf(data=BART_Stops_Buffers) +
+  geom_sf(data=BART_Stops_SF, show.legend = "point") +
   facet_wrap(~Legend) + 
   labs(caption = "Figure 2.6") +
   mapTheme()
@@ -328,7 +342,7 @@ Create an sf object with ONLY the unioned buffer from the `septaBuffers`
 spatial data frame.
 
 ```{r}
-buffer <- filter(LightRailBuffers, Legend=="Unioned Buffer")
+buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
 ```
 
 ### Spatial Intersection of tracts and buffers
@@ -462,7 +476,7 @@ intersections <- rbind(clip, selection1, selectCentroids)
 
 ggplot() +
   geom_sf(data=intersections, aes(fill = TotalPop)) +
-  geom_sf(data=LightRailStops, show.legend = "point") +
+  geom_sf(data=BART_Stops_SF, show.legend = "point") +
   scale_fill_viridis_c() +
   facet_wrap(~Selection_Type) + 
   mapTheme()
