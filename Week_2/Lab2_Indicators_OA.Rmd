@@ -41,7 +41,7 @@ palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
 ### Use `get_acs()` to get 2016 ACS data
 
 ```{r results='hide'}
-census_api_key("a3ebdf1648b7fb21df55df7246d9642f040c0ee0", overwrite = TRUE)
+census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
 
 tracts09 <-  
   get_acs(geography = "tract",
@@ -54,7 +54,7 @@ tracts09 <-
   st_transform('EPSG:2227')
 ```
 
-Filter out Farralon Islands fo 2009
+Filter out Farralon Islands for 2009
 ```{r Filter Farralon 1}
 # Calculate the centroids
 centroids <- st_centroid(tracts09)
@@ -69,10 +69,15 @@ tracts09$lat <- coords[, "Y"]
 min_lon <- min(tracts09$lon)
 
 tracts09 <- tracts09 %>%
-   filter(lon > min_lon)
+  filter(lon > min_lon)
 
 tracts09 <- tracts09 %>%
   select(-lat, -lon)
+
+#Crop instead? Coords chosen using epsg.io
+#tracts09_crop <- st_crop(tracts09, xmin = 6034509.933356, xmax = 5957121.869415, ymin = 2080091.306697, ymax = 2137109.999123)
+
+
 
 ```
 
@@ -105,8 +110,8 @@ A <-
 
 B <- 
   ggplot() +
-  geom_sf(data = totalPop09, aes(fill = q5(estimate))) +
-  theme(plot.title = element_text(size=22)) 
+  geom_sf(data = crop, aes(fill = q5(estimate))) +
+  theme(plot.title = element_text(size=22))
 
 C <-
   ggplot() +
@@ -201,7 +206,7 @@ tracts17 <-
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
-Filter out Farralon Islands fo 2017
+Filter out Farralon Islands for 2017
 ```{r Filter Farralon 2}
 # Calculate the centroids
 centroids <- st_centroid(tracts17)
@@ -232,12 +237,15 @@ this lab.
 ```{r}
 
 allTracts <- rbind(tracts09,tracts17)
+
+#Crop Farrallon Island instead?
+allTracts <- st_crop(allTracts, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 ```
 
 ### Wrangling Transit Open Data
 
 ```{r}
-BART_Stops <- st_read("/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_2/data/BART_Sta_13.shp")
+BART_Stops <- st_read("D:/Penn/Comms/musa_5080_2023/Week_2/data/BART_Sta_13.shp")
 
 BART_Stops <- BART_Stops %>%
   st_transform(2227)
@@ -340,6 +348,7 @@ of joins and discuss which is likely appropriate for this analysis
 
 Create an sf object with ONLY the unioned buffer from the `septaBuffers`
 spatial data frame.
+
 
 ```{r}
 buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
@@ -465,9 +474,10 @@ selectCentroids <-
   st_drop_geometry() %>%
   left_join(., dplyr::select(tracts09, GEOID), by = "GEOID") %>%
   st_sf() %>%
-  dplyr::select(TotalPop) %>%
+  dplyr::select(TotalPop, MedRent) %>%
   mutate(Selection_Type = "Select by Centroids")
 ```
+
 
 Plotting the results of each method
 
@@ -481,6 +491,7 @@ ggplot() +
   facet_wrap(~Selection_Type) + 
   mapTheme()
 ```
+
 
 ## Bonus Exercise - Can you create a small multiple map of the three types of operations? (NOT GRADED)
 
@@ -507,9 +518,12 @@ allTracts.group <-
       left_join(allTracts) %>%
       st_sf() %>%
       mutate(TOD = "Non-TOD")) %>%
-  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.14, MedRent)) 
+    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.14, MedRent)) %>%
+      st_join(BART_Stops)
 
 ```
+
+plot(BART_Stops_Buffers)
 
 Can you try to create the maps seen in the text? The solutions are
 contained in "map_exercise.R"
@@ -569,6 +583,9 @@ allTracts.Summary %>%
 
 #### Examining three submarkets
 
+
+
+
 ```{r}
 centerCity <-
   st_intersection(
@@ -604,6 +621,37 @@ allTracts.threeMarkets <-
   st_sf() 
 ```
 
+
+```{r graduated symbol map }
+Stops_Individual <- st_buffer(BART_Stops_SF, 2640)
+#Crop Farrallon Island ?
+tracts17_crop <- st_crop(tracts17, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
+
+
+propmap <-
+  st_join(Stops_Individual, st_centroid(tracts17)) %>%
+  group_by(STATION) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop),
+            rent_0.5mi_mean = round(mean(MedRent), digits = 0))
+
+#propmap <- gather(propmap, key = "Stat", value, 2:3) 
+  
+ggplot()+
+  geom_sf(data = tracts17_crop, fill = "white") +
+  geom_sf(data = st_centroid(propmap),
+          aes(size = pop_0.5mi_sum)) +
+  scale_size_continuous(range = c(1,5))
+
+ggplot()+
+  geom_sf(data = tracts17_crop, fill = "white") +
+  geom_sf(data = st_centroid(propmap),
+          aes(size = rent_0.5mi_mean)) +
+  scale_size_continuous(range = c(1,5))
+
+
+  
+```  
+  
 ### Example of using `multipleRingBuffer()` function
 
 ```{r}
