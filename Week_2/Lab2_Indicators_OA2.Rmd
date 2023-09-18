@@ -240,7 +240,6 @@ allTracts <- rbind(tracts09,tracts17)
 ### Wrangling Transit Open Data
 
 ```{r}
-# BART_Stops <- st_read("/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_2/data/BART_Sta_13.shp")
 BART_Stops <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
 
 BART_Stops <- BART_Stops %>%
