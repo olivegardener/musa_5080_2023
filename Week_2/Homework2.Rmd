@@ -1,6 +1,6 @@
 ---
-title: "Lab 2: Why Start With Indicators?"
-author: "Matt Harris & Michael Fichman"
+title: "Homework 2"
+author: ""
 date: '2022-08-22'
 output: html_document
 editor_options: 
@@ -49,7 +49,7 @@ tracts09 <-
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2009, state=06, county=075, 
+          year=2009, state=06, county=c("001", "013", "075", "081"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
@@ -69,14 +69,14 @@ tracts09 <-
 
 ```
 
-```{r tracts17 results='hide'}
+```{r tracts17}
 tracts17 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2017, state=06, county=075, 
+          year=2017, state=06, county=c("001", "013", "075", "081"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
@@ -95,34 +95,14 @@ tracts17 <-
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
-<!-- Filter out Farralon Islands for 2017 -->
-<!-- ```{r Filter Farralon 2} -->
-<!-- # Calculate the centroids -->
-<!-- centroids <- st_centroid(tracts17) -->
 
-<!-- # Extract the centroid coordinates -->
-<!-- coords <- st_coordinates(centroids) -->
-
-<!-- # Add the coordinates as new columns -->
-<!-- tracts17$lon <- coords[, "X"] -->
-<!-- tracts17$lat <- coords[, "Y"] -->
-
-<!-- min_lon <- min(tracts17$lon) -->
-
-<!-- tracts17 <- tracts17 %>% -->
-<!--    filter(lon > min_lon) -->
-
-<!-- tracts17 <- tracts17 %>% -->
-<!--   select(-lat, -lon) -->
-
-<!-- ``` -->
 
 ```{r bind tracts}
 
 allTracts <- rbind(tracts09,tracts17)
 
-#Crop Farrallon Island instead?
-allTracts <- st_crop(allTracts, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
+#Crop
+#allTracts <- st_crop(allTracts, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 ```
 
 ### Wrangling Transit Open Data
@@ -141,17 +121,22 @@ indices <- st_within(BART_Stops, sf_outline, sparse = FALSE)
 # Create a new sf object containing only the points within the boundary
 BART_Stops_SF <- BART_Stops[as.vector(indices), ]
 
-# MUNI_Stops <- read.socrata(
-#   "https://data.sfgov.org/resource/i28k-bkz6.json",
-#   app_token = "fpOaceiSu5zHVOar6s6P4xNah",
-#   email     = "oatwood@upenn.edu",
-#   password  = "viqZi4-jucpuh-zimhas"
-# )
+```
+
+```{r Crop Size}
+# # Extract the centroid coordinates
+# coords <- st_coordinates(BART_Stops)
 # 
-# MUNI_Stops_sf <- st_as_sf(MUNI_Stops, coords = c("longitude", "latitude"), crs = 4326)
+# # Add the coordinates as new columns
+# BART_Stops$lon <- coords[, "X"]
+# BART_Stops$lat <- coords[, "Y"]
 # 
-# MUNI_Stops_sf <- MUNI_Stops_sf %>%
-#   st_transform(2227)
+# min_lon <- min(BART_Stops$lon)
+# max_lon <- max(BART_Stops$lon)
+# min_lat <- min(BART_Stops$lat)
+# max_lat <- max(BART_Stops$lat) 
+# 
+# allTracts <- st_crop(allTracts, xmin = min_lon, xmax = max_lon, ymin = min_lat, ymax = max_lat)
 ```
 
 ```{r }
@@ -164,12 +149,6 @@ BART_Stops_Buffers <-
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
 ```
-
-Let's examine both buffers by making a "[small
-multiples](https://www.juiceanalytics.com/writing/better-know-visualization-small-multiples)"
-plot. This type of plot shows multiple views of the same data or
-geographic area. We accomplish this by using the `facet_wrap()`
-{ggplot2} function on the *Legend* column.
 
 ```{r}
 buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
@@ -184,16 +163,11 @@ selectCentroids <-
   dplyr::select(TotalPop, MedRent) %>%
   mutate(Selection_Type = "Select by Centroids")
 ```
-
-
-Plotting the results of each method
-
 ```{r}
 ggplot() +
   geom_sf(data=selectCentroids, aes(fill = TotalPop)) +
   geom_sf(data=BART_Stops_SF, show.legend = "point") +
   scale_fill_viridis_c() +
-  facet_wrap(~Selection_Type) + 
   mapTheme()
 ```
 ### Indicator Maps
@@ -259,10 +233,6 @@ allTracts.Summary %>%
 
 ### TOD Indicator Plots
 
-Let's create small multiple plots We use the "gather" command (look this
-one up please) To go from wide to long Why do we do this?? Notice we can
-"pipe" a ggplot call right into this operation!
-
 ```{r}
 allTracts.Summary %>%
   gather(Variable, Value, -year, -TOD) %>%
@@ -323,7 +293,7 @@ tracts17_crop <- st_crop(tracts17, xmin = 6025077, xmax = 5957122, ymin = 208009
 
 propmap <-
   st_join(Stops_Individual, st_centroid(tracts17)) %>%
-  group_by(STATION) %>%
+  group_by(Name) %>%
   summarize(pop_0.5mi_sum = sum(TotalPop),
             rent_0.5mi_mean = round(mean(MedRent), digits = 0))
 
@@ -376,30 +346,6 @@ ggplot(allTracts.rings.summary,
   geom_line(size=2)
 
 
-
-```
-
-```{r}
-allTracts <- rbind(tracts20,tracts09)
-septa_MRB <- multipleRingBuffer(st_union(septaStops), 47520, 2640)
-
-allTracts.rings <-
-  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
-          septa_MRB) %>%
-  st_drop_geometry() %>%
-  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
-            by=c("GEOID"="GEOID", "year"="year")) %>%
-  st_sf() %>%
-  mutate(distance = distance / 5280) #convert to miles
-
-
-
-  ggplot() +
-    geom_sf(data=septa_MRB) +
-    geom_sf(data=septaStops, size=1) +
-    geom_sf(data=st_union(tracts20), fill=NA, size=1.2) +
-    labs(title="Half mile buffers") +
-    mapTheme()
 
 ```
 
