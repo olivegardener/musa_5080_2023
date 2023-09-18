@@ -1,6 +1,6 @@
 ---
 title: "Homework 2"
-author: ""
+author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
 date: '2022-08-22'
 output: html_document
 editor_options: 
@@ -49,7 +49,7 @@ tracts09 <-
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2009, state=06, county=c("001", "013", "075", "081"), 
+          year=2009, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
@@ -76,7 +76,7 @@ tracts17 <-
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2017, state=06, county=c("001", "013", "075", "081"), 
+          year=2017, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
@@ -124,19 +124,17 @@ BART_Stops_SF <- BART_Stops[as.vector(indices), ]
 ```
 
 ```{r Crop Size}
-# # Extract the centroid coordinates
-# coords <- st_coordinates(BART_Stops)
-# 
-# # Add the coordinates as new columns
-# BART_Stops$lon <- coords[, "X"]
-# BART_Stops$lat <- coords[, "Y"]
-# 
-# min_lon <- min(BART_Stops$lon)
-# max_lon <- max(BART_Stops$lon)
-# min_lat <- min(BART_Stops$lat)
-# max_lat <- max(BART_Stops$lat) 
-# 
-# allTracts <- st_crop(allTracts, xmin = min_lon, xmax = max_lon, ymin = min_lat, ymax = max_lat)
+#Buffer Bart stops for Bounding Box
+Buffer4Crop <- st_union(st_buffer(BART_Stops_SF, (8*2640))) %>%
+      st_sf() %>%
+      mutate(Legend = "Crop Buffer")
+
+# Get the bounding box of Buffer4Crop
+bbox_Buffer4Crop <- st_bbox(Buffer4Crop)
+
+# Crop allTracts using the bounding box of Buffer4Crop
+cropped_allTracts <- st_crop(allTracts, bbox_Buffer4Crop)
+
 ```
 
 ```{r }
@@ -153,6 +151,7 @@ BART_Stops_Buffers <-
 ```{r}
 buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
 ```
+
 
 ```{r}
 selectCentroids <-
@@ -190,7 +189,7 @@ allTracts.group <-
       left_join(allTracts) %>%
       st_sf() %>%
       mutate(TOD = "Non-TOD")) %>%
-    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.14, MedRent)) %>%
+    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.68, MedRent)) %>%
       st_join(BART_Stops)
 
 ```
@@ -241,39 +240,29 @@ allTracts.Summary %>%
 
 ```{r graduated symbol map }
 Stops_Individual <- st_buffer(BART_Stops_SF, 2640)
-#Crop Farrallon Island ?
-#tracts17_crop <- st_crop(tracts17, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
-
 
 propmap <-
-  st_join(Stops_Individual, st_centroid(tracts17)) %>%
+  st_join(Stops_Individual, st_centroid(cropped_allTracts)) %>%
   group_by(Name) %>%
   summarize(pop_0.5mi_sum = sum(TotalPop),
             rent_0.5mi_mean = round(mean(MedRent), digits = 0))
 ggplot()+
-  geom_sf(data = tracts17_crop, fill = "white") +
+  geom_sf(data = cropped_allTracts, fill = "white") +
   geom_sf(data = st_centroid(propmap),
           aes(size = pop_0.5mi_sum)) +
-  scale_size_continuous(range = c(1,9))
+  scale_size_continuous(range = c(0.1,4))
 
 ggplot()+
-  geom_sf(data = tracts17_crop, fill = "white") +
+  geom_sf(data = cropped_allTracts, fill = "white") +
   geom_sf(data = st_centroid(propmap),
           aes(size = rent_0.5mi_mean)) +
-  scale_size_continuous(range = c(1,9))
+  scale_size_continuous(range = c(0.1,4))
 ```  
   
 ### Example of using `multipleRingBuffer()` function
 
 ```{r multipleRingBuffer}
 BART_MRB <- multipleRingBuffer(st_union(BART_Stops_SF), 47520, 2640)
-
- # ggplot() +
- #    geom_sf(data=BART_MRB) +
- #    geom_sf(data=BART_Stops_SF, size=1) +
- #    geom_sf(data=st_union(tracts17_crop), fill=NA, size=1.2) +
- #    labs(title="Half mile buffers") +
- #    mapTheme()
 
 allTracts.rings <-
   st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
