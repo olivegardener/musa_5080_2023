@@ -213,12 +213,6 @@ kable(allTracts.Summary) %>%
            general = "Table 2.2")
 ```
 
-Let's make some comparisons and speculate about the willingness to pay
-and demographics in these areas 2009-2020 (see the 2000 data in the text
-too)
-
-Notice how we pipe the kable() command here
-
 ```{r}
 allTracts.Summary %>%
   unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
@@ -244,51 +238,11 @@ allTracts.Summary %>%
   plotTheme() + theme(legend.position="bottom")
 ```
 
-#### Examining three submarkets
-
-
-
-
-```{r}
-centerCity <-
-  st_intersection(
-    st_buffer(filter(septaStops, Line == "El"), 2640) %>% st_union(),
-    st_buffer(filter(septaStops, Line == "Broad_St"), 2640) %>% st_union()) %>%
-  st_sf() %>%
-  mutate(Submarket = "Center City")
-
-el <-
-  st_buffer(filter(septaStops, Line == "El"), 2640) %>% st_union() %>%
-  st_sf() %>%
-  st_difference(centerCity) %>%
-  mutate(Submarket = "El")
-
-broad.st <-
-  st_buffer(filter(septaStops, Line == "Broad_St"), 2640) %>% st_union() %>%
-  st_sf() %>%
-  st_difference(centerCity) %>%
-  mutate(Submarket = "Broad Street")
-
-threeMarkets <- rbind(el, broad.st, centerCity)
-```
-
-You can then bind these buffers to tracts and map them or make small
-multiple plots
-
-```{r}
-allTracts.threeMarkets <-
-  st_join(st_centroid(allTracts), threeMarkets) %>%
-  st_drop_geometry() %>%
-  left_join(allTracts) %>%
-  mutate(Submarket = replace_na(Submarket, "Non-TOD")) %>%
-  st_sf() 
-```
-
 
 ```{r graduated symbol map }
 Stops_Individual <- st_buffer(BART_Stops_SF, 2640)
 #Crop Farrallon Island ?
-tracts17_crop <- st_crop(tracts17, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
+#tracts17_crop <- st_crop(tracts17, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 
 
 propmap <-
@@ -296,9 +250,6 @@ propmap <-
   group_by(Name) %>%
   summarize(pop_0.5mi_sum = sum(TotalPop),
             rent_0.5mi_mean = round(mean(MedRent), digits = 0))
-
-#propmap <- gather(propmap, key = "Stat", value, 2:3) 
-  
 ggplot()+
   geom_sf(data = tracts17_crop, fill = "white") +
   geom_sf(data = st_centroid(propmap),
@@ -310,9 +261,6 @@ ggplot()+
   geom_sf(data = st_centroid(propmap),
           aes(size = rent_0.5mi_mean)) +
   scale_size_continuous(range = c(1,9))
-
-
-  
 ```  
   
 ### Example of using `multipleRingBuffer()` function
