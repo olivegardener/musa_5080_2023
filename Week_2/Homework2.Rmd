@@ -1,7 +1,7 @@
 ---
 title: "Homework 2"
 author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
-date: '2022-08-22'
+date: '2023-09-19'
 output: html_document
 editor_options: 
   markdown: 
@@ -107,7 +107,7 @@ allTracts <- rbind(tracts09,tracts17)
 
 ### Wrangling Transit Open Data
 
-```{r}
+```{r Wrangle Transit Data}
 BART_Stops <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
 
 BART_Stops <- BART_Stops %>%
@@ -137,7 +137,7 @@ cropped_allTracts <- st_crop(allTracts, bbox_Buffer4Crop)
 
 ```
 
-```{r }
+```{r BART Stops Buffer}
 BART_Stops_Buffers <- 
   rbind(
     st_buffer(BART_Stops_SF, 2640) %>%
@@ -148,12 +148,12 @@ BART_Stops_Buffers <-
       mutate(Legend = "Unioned Buffer"))
 ```
 
-```{r}
+```{r buffer filter}
 buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
 ```
 
 
-```{r}
+```{r Select Centroids}
 selectCentroids <-
   st_centroid(tracts09)[buffer,] %>%
   st_drop_geometry() %>%
@@ -162,21 +162,16 @@ selectCentroids <-
   dplyr::select(TotalPop, MedRent) %>%
   mutate(Selection_Type = "Select by Centroids")
 ```
-```{r}
+```{r Stations with Tract Selection}
 ggplot() +
   geom_sf(data=selectCentroids, aes(fill = TotalPop)) +
   geom_sf(data=BART_Stops_SF, show.legend = "point") +
   scale_fill_viridis_c() +
   mapTheme()
 ```
-### Indicator Maps
 
-We do our centroid joins as above, and then do a "disjoin" to get the
-ones that *don't* join, and add them all together. Do this operation and
-then examine it. What represents the joins/doesn't join dichotomy? Note
-that this contains a correct 2016-2020 inflation calculation
 
-```{r}
+```{r Indicator Maps}
 allTracts.group <- 
   rbind(
     st_centroid(allTracts)[buffer,] %>%
@@ -192,11 +187,53 @@ allTracts.group <-
     mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.68, MedRent)) %>%
       st_join(BART_Stops)
 
+# Should do for SF only, too large of an area to compare
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(tracts17))+
+    geom_sf(aes(fill = TOD)) +
+    labs(title = "Time/Space Groups") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(tracts17))+
+    geom_sf(aes(fill = TotalPop)) +
+    labs(title = "Time/Space Groups") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(tracts17))+
+    geom_sf(aes(fill = MedHHInc)) +
+    labs(title = "Time/Space Groups") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(tracts17))+
+    geom_sf(aes(fill = MedRent)) +
+    labs(title = "Time/Space Groups") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(tracts17))+
+    geom_sf(aes(fill = drop_units(density))) +
+    labs(title = "Time/Space Groups") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
 ```
 
 ### TOD Indicator Tables
 
-```{r}
+```{r TOD Indicator Table}
 allTracts.Summary <- 
   st_drop_geometry(allTracts.group) %>%
   group_by(year, TOD) %>%
@@ -212,7 +249,7 @@ kable(allTracts.Summary) %>%
            general = "Table 2.2")
 ```
 
-```{r}
+```{r kable table}
 allTracts.Summary %>%
   unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
   gather(Variable, Value, -year.TOD) %>%
@@ -226,7 +263,7 @@ allTracts.Summary %>%
 
 ### TOD Indicator Plots
 
-```{r}
+```{r TOD indicator Plots}
 allTracts.Summary %>%
   gather(Variable, Value, -year, -TOD) %>%
   ggplot(aes(year, Value, fill = TOD)) +
@@ -241,20 +278,20 @@ allTracts.Summary %>%
 ```{r graduated symbol map }
 Stops_Individual <- st_buffer(BART_Stops_SF, 2640)
 
-propmap <-
+graduated_stops <-
   st_join(Stops_Individual, st_centroid(cropped_allTracts)) %>%
   group_by(Name) %>%
-  summarize(pop_0.5mi_sum = sum(TotalPop),
-            rent_0.5mi_mean = round(mean(MedRent), digits = 0))
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
 ggplot()+
   geom_sf(data = cropped_allTracts, fill = "white") +
-  geom_sf(data = st_centroid(propmap),
+  geom_sf(data = st_centroid(graduated_stops),
           aes(size = pop_0.5mi_sum)) +
   scale_size_continuous(range = c(0.1,4))
 
 ggplot()+
   geom_sf(data = cropped_allTracts, fill = "white") +
-  geom_sf(data = st_centroid(propmap),
+  geom_sf(data = st_centroid(graduated_stops),
           aes(size = rent_0.5mi_mean)) +
   scale_size_continuous(range = c(0.1,4))
 ```  
