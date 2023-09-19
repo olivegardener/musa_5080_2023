@@ -2,10 +2,15 @@
 title: "Homework 2"
 author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
 date: '2023-09-19'
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
 editor_options: 
   markdown: 
     wrap: 72
+    
 ---
 
 ```{r setup clear environment, include=FALSE}
@@ -13,10 +18,13 @@ knitr::opts_chunk$set(echo = TRUE)
 rm(list=ls())
 ```
 
-### Load packages and functions
+# Setup
 
-```{r setup packages, warning = FALSE}
+```{r setup packages, message = FALSE, warning = FALSE}
 # Load Libraries
+
+#install.packages("gridExtra")
+
 
 library(tidyverse)
 library(tidycensus)
@@ -25,6 +33,8 @@ library(kableExtra)
 library(RSocrata)
 library(dplyr)
 library(stringr)
+library(units)
+library(gridExtra)
 
 # we don't want scientific notation
 options(scipen=999)
@@ -41,9 +51,10 @@ census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
 
 ```
 
+## Wrangling 2009 Census Tract data for both San Francisco and the Bay Area
 
-```{r tracts09}
-tracts09 <- 
+```{r tracts09, message = FALSE, warning = FALSE, results = "hide"}
+tracts09_bay <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
@@ -64,13 +75,38 @@ tracts09 <-
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2009", density = (TotalPop / (area * 0.00000003587 ))) %>%
+         year = "2009", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+
+tracts09_sf <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2009, state=06, county="075", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2009", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 
 ```
+## Wrangling 2017 Census Tract data for both San Francisco and the Bay Area
 
-```{r tracts17}
-tracts17 <- 
+```{r tracts17, message = FALSE, warning = FALSE, results = "hide"}
+tracts17_bay <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
@@ -91,41 +127,67 @@ tracts17 <-
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2017", density = (TotalPop / (area * 0.00000003587 ))) %>%
+         year = "2017", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+
+tracts17_sf <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2017, state=06, county="075", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2017", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+
+```
+### Connecting both years' tract data for both san Francisco and the Bay Area
+
+```{r bind tracts, message = FALSE, warning = FALSE}
+
+allTracts_bay <- rbind(tracts09_bay,tracts17_bay)
+
+allTracts_sf <- rbind(tracts09_sf,tracts17_sf)
+
 ```
 
+# Wrangling Transit Open Data
 
+```{r Wrangle Transit Data, message = FALSE, warning = FALSE}
+BART_Stops_bay <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
 
-```{r bind tracts}
-
-allTracts <- rbind(tracts09,tracts17)
-
-#Crop
-#allTracts <- st_crop(allTracts, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
-```
-
-### Wrangling Transit Open Data
-
-```{r Wrangle Transit Data}
-BART_Stops <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
-
-BART_Stops <- BART_Stops %>%
+BART_Stops_bay <- BART_Stops_bay %>%
   st_transform(2227)
 
-sf_outline <- st_union(tracts09)
+sf_outline <- st_union(tracts09_sf)
 
 # Find the points that are within the boundary
-indices <- st_within(BART_Stops, sf_outline, sparse = FALSE)
+indices <- st_within(BART_Stops_bay, sf_outline, sparse = FALSE)
 
 # Create a new sf object containing only the points within the boundary
-BART_Stops_SF <- BART_Stops[as.vector(indices), ]
+BART_Stops_sf <- BART_Stops_bay[as.vector(indices), ]
 
 ```
 
-```{r Crop Size}
+## Cropping the extent to show relevant areas
+
+```{r Crop Size, message = FALSE, warning = FALSE}
 #Buffer Bart stops for Bounding Box
-Buffer4Crop <- st_union(st_buffer(BART_Stops_SF, (8*2640))) %>%
+Buffer4Crop <- st_union(st_buffer(BART_Stops_bay, (8*2640))) %>%
       st_sf() %>%
       mutate(Legend = "Crop Buffer")
 
@@ -133,109 +195,181 @@ Buffer4Crop <- st_union(st_buffer(BART_Stops_SF, (8*2640))) %>%
 bbox_Buffer4Crop <- st_bbox(Buffer4Crop)
 
 # Crop allTracts using the bounding box of Buffer4Crop
-cropped_allTracts <- st_crop(allTracts, bbox_Buffer4Crop)
+cropped_allTracts_bay <- st_crop(allTracts_bay, bbox_Buffer4Crop)
+
+
+#Crop SF only, no Farallon Islands
+cropped_allTracts_sf <- st_crop(allTracts_sf, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 
 ```
+## Creating buffers
+```{r BART Stops Buffer, message = FALSE, warning = FALSE}
 
-```{r BART Stops Buffer}
-BART_Stops_Buffers <- 
+BART_Stops_bay_Buffers <- 
   rbind(
-    st_buffer(BART_Stops_SF, 2640) %>%
+    st_buffer(BART_Stops_bay, 2640) %>%
       mutate(Legend = "Buffer") %>%
       dplyr::select(Legend),
-    st_union(st_buffer(BART_Stops_SF, 2640)) %>%
+    st_union(st_buffer(BART_Stops_bay, 2640)) %>%
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
+
+BART_Stops_sf_Buffers <- 
+  rbind(
+    st_buffer(BART_Stops_sf, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(BART_Stops_sf, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+buffer_bay <- filter(BART_Stops_bay_Buffers, Legend =="Unioned Buffer")
+
+buffer_sf <- filter(BART_Stops_sf_Buffers, Legend =="Unioned Buffer")
+
 ```
 
-```{r buffer filter}
-buffer <- filter(BART_Stops_Buffers, Legend =="Unioned Buffer")
-```
+### Selecting by Census tracts by centroids
 
+```{r Select Centroids, message = FALSE, warning = FALSE}
+#is this right to select based on tracts09?
 
-```{r Select Centroids}
-selectCentroids <-
-  st_centroid(tracts09)[buffer,] %>%
+selectCentroids_bay <-
+  st_centroid(tracts09_bay)[buffer_bay,] %>%
   st_drop_geometry() %>%
-  left_join(., dplyr::select(tracts09, GEOID), by = "GEOID") %>%
+  left_join(., dplyr::select(tracts09_bay, GEOID), by = "GEOID") %>%
   st_sf() %>%
   dplyr::select(TotalPop, MedRent) %>%
   mutate(Selection_Type = "Select by Centroids")
+
+selectCentroids_sf <-
+  st_centroid(tracts09_sf)[buffer_sf,] %>%
+  st_drop_geometry() %>%
+  left_join(., dplyr::select(tracts09_sf, GEOID), by = "GEOID") %>%
+  st_sf() %>%
+  dplyr::select(TotalPop, MedRent) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
 ```
-```{r Stations with Tract Selection}
+## Mapping Census tracts near transit stations
+
+```{r Stations with Tract Selection, message = FALSE, warning = FALSE}
 ggplot() +
-  geom_sf(data=selectCentroids, aes(fill = TotalPop)) +
-  geom_sf(data=BART_Stops_SF, show.legend = "point") +
+  geom_sf(data=selectCentroids_bay, aes(fill = TotalPop)) +
+  geom_sf(data=BART_Stops_bay, show.legend = "point") +
   scale_fill_viridis_c() +
   mapTheme()
+
+ggplot() +
+  geom_sf(data=selectCentroids_sf, aes(fill = TotalPop)) +
+  geom_sf(data=BART_Stops_sf, show.legend = "point") +
+  scale_fill_viridis_c() +
+  mapTheme()
+
 ```
 
+# Comparing Indicators
 
-```{r Indicator Maps}
-allTracts.group <- 
+```{r Indicator Maps, message = FALSE, warning = FALSE}
+allTracts.group_bay <- 
   rbind(
-    st_centroid(allTracts)[buffer,] %>%
+    st_centroid(allTracts_bay)[buffer_bay,] %>%
       st_drop_geometry() %>%
-      left_join(allTracts) %>%
+      left_join(allTracts_bay) %>%
       st_sf() %>%
       mutate(TOD = "TOD"),
-    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+    st_centroid(allTracts_bay)[buffer_bay, op = st_disjoint] %>%
       st_drop_geometry() %>%
-      left_join(allTracts) %>%
+      left_join(allTracts_bay) %>%
       st_sf() %>%
       mutate(TOD = "Non-TOD")) %>%
     mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.68, MedRent)) %>%
-      st_join(BART_Stops)
+      st_join(BART_Stops_bay)
+
+allTracts.group_sf <- 
+  rbind(
+    st_centroid(cropped_allTracts_sf)[buffer_sf,] %>%
+      st_drop_geometry() %>%
+      left_join(cropped_allTracts_sf) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(cropped_allTracts_sf)[buffer_sf, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(cropped_allTracts_sf) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.68, MedRent)) %>%
+      st_join(BART_Stops_sf)
 
 # Should do for SF only, too large of an area to compare
+```
+## Mapping indicators
 
-ggplot(allTracts.group)+
-    geom_sf(data = st_union(tracts17))+
+### TOD vs. Non TOD
+
+```{r TOD and Non-TOD map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = TOD)) +
-    labs(title = "Time/Space Groups") +
+    labs(title = "Time/Space Groups", subtitle = "TOD vs Non-TOD") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
+### Total Population
 
-ggplot(allTracts.group)+
-    geom_sf(data = st_union(tracts17))+
+```{r total pop map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = TotalPop)) +
-    labs(title = "Time/Space Groups") +
+    labs(title = "Time/Space Groups", subtitle = "Total Population") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
 
-ggplot(allTracts.group)+
-    geom_sf(data = st_union(tracts17))+
+### Median Household Income
+
+```{r medhhinc map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = MedHHInc)) +
-    labs(title = "Time/Space Groups") +
+    labs(title = "Time/Space Groups", subtitle = "Median Household Income") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
 
-ggplot(allTracts.group)+
-    geom_sf(data = st_union(tracts17))+
+### Median Rent
+
+```{r medrent map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = MedRent)) +
-    labs(title = "Time/Space Groups") +
+    labs(title = "Time/Space Groups", subtitle = "Median Rent") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
 
-ggplot(allTracts.group)+
-    geom_sf(data = st_union(tracts17))+
-    geom_sf(aes(fill = drop_units(density))) +
-    labs(title = "Time/Space Groups") +
+### Population Density per Square Mile
+
+```{r density map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = density)) +
+    labs(title = "Time/Space Groups", subtitle = "Density") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
 
 ```
 
-### TOD Indicator Tables
+## Plotting indicators
 
-```{r TOD Indicator Table}
-allTracts.Summary <- 
-  st_drop_geometry(allTracts.group) %>%
+```{r TOD Indicator Table bay, message = FALSE, warning = FALSE}
+allTracts.Summary_bay <- 
+  st_drop_geometry(allTracts.group_bay) %>%
   group_by(year, TOD) %>%
   summarize(Rent = mean(MedRent, na.rm = T),
             Population = mean(TotalPop, na.rm = T),
@@ -243,14 +377,57 @@ allTracts.Summary <-
             Density = mean(density, na.rm = T),
             Percent_Poverty = mean(pctPoverty, na.rm = T))
 
-kable(allTracts.Summary) %>%
-  kable_styling() %>%
-  footnote(general_title = "\n",
-           general = "Table 2.2")
+# kable(allTracts.Summary_bay) %>%
+#   kable_styling() %>%
+#   footnote(general_title = "\n",
+#            general = "Table 2.2")
 ```
 
-```{r kable table}
-allTracts.Summary %>%
+```{r TOD Indicator Table sf, message = FALSE, warning = FALSE}
+allTracts.Summary_sf <- 
+  st_drop_geometry(allTracts.group_sf) %>%
+  group_by(year, TOD) %>%
+  summarize(Rent = mean(MedRent, na.rm = T),
+            Population = mean(TotalPop, na.rm = T),
+            #Percent_White = mean(pctWhite, na.rm = T),
+            Density = mean(density, na.rm = T),
+            Percent_Poverty = mean(pctPoverty, na.rm = T))
+
+# kable(allTracts.Summary_sf) %>%
+#   kable_styling() %>%
+#   footnote(general_title = "\n",
+#            general = "Table 2.2")
+```
+
+### Bay Area
+```{r TOD indicator Plots bay, message = FALSE, warning = FALSE}
+bay_plot <- allTracts.Summary_bay %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=5) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "Bay Area Indicator differences across time and space") +
+  plotTheme() + theme(legend.position="bottom")
+
+sf_plot <- allTracts.Summary_sf %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=5) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "San Francisco Indicator differences across time and space") +
+  plotTheme() + theme(legend.position="bottom")
+
+grid.arrange(bay_plot, sf_plot)
+```
+
+## TOD Indicator Tables
+
+### Bay Area
+
+```{r kable table bay, message = FALSE, warning = FALSE}
+allTracts.Summary_bay %>%
   unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
   gather(Variable, Value, -year.TOD) %>%
   mutate(Value = round(Value, 2)) %>%
@@ -261,65 +438,123 @@ allTracts.Summary %>%
            general = "Table 2.3")
 ```
 
-### TOD Indicator Plots
+### San Francisco only
 
-```{r TOD indicator Plots}
-allTracts.Summary %>%
-  gather(Variable, Value, -year, -TOD) %>%
-  ggplot(aes(year, Value, fill = TOD)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_wrap(~Variable, scales = "free", ncol=5) +
-  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
-  labs(title = "Indicator differences across time and space") +
-  plotTheme() + theme(legend.position="bottom")
+```{r kable table sf, message = FALSE, warning = FALSE}
+allTracts.Summary_sf %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 2.3")
 ```
 
+## Graduated Symbol Maps
+### Bay Area
 
-```{r graduated symbol map }
-Stops_Individual <- st_buffer(BART_Stops_SF, 2640)
+```{r graduated symbol map bay, message = FALSE, warning = FALSE}
+Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
 
-graduated_stops <-
-  st_join(Stops_Individual, st_centroid(cropped_allTracts)) %>%
+graduated_stops_bay <-
+  st_join(Stops_Individual_bay, st_centroid(cropped_allTracts_bay)) %>%
   group_by(Name) %>%
   summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
             rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
-ggplot()+
-  geom_sf(data = cropped_allTracts, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops),
+stops_pop_bay <- ggplot()+
+  geom_sf(data = cropped_allTracts_bay, fill = "white") +
+  geom_sf(data = st_centroid(graduated_stops_bay),
           aes(size = pop_0.5mi_sum)) +
   scale_size_continuous(range = c(0.1,4))
 
-ggplot()+
-  geom_sf(data = cropped_allTracts, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops),
+stops_rent_bay <-ggplot()+
+  geom_sf(data = cropped_allTracts_bay, fill = "white") +
+  geom_sf(data = st_centroid(graduated_stops_bay),
           aes(size = rent_0.5mi_mean)) +
   scale_size_continuous(range = c(0.1,4))
+
+grid.arrange(stops_pop_bay, stops_rent_bay)
+
+```
+
+## Graduated Symbol Maps
+### San Francisco
+
+```{r graduated income symbol map sf, message = FALSE, warning = FALSE}
+Stops_Individual_sf <- st_buffer(BART_Stops_sf, 2640)
+
+graduated_stops_sf <-
+  st_join(Stops_Individual_sf, st_centroid(cropped_allTracts_sf)) %>%
+  group_by(Name) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
+
+stops_pop_sf <- ggplot()+
+  geom_sf(data = cropped_allTracts_sf, fill = "white") +
+  geom_sf(data = st_centroid(graduated_stops_sf),
+          aes(size = pop_0.5mi_sum)) +
+  scale_size_continuous(range = c(0.1,4))
+
+stops_rent_sf <- ggplot()+
+  geom_sf(data = cropped_allTracts_sf, fill = "white") +
+  geom_sf(data = st_centroid(graduated_stops_sf),
+          aes(size = rent_0.5mi_mean)) +
+  scale_size_continuous(range = c(0.1,4))
+
+grid.arrange(stops_pop_sf, stops_rent_sf)
 ```  
   
-### Example of using `multipleRingBuffer()` function
+## Multiple Ring Buffer Analysis
 
-```{r multipleRingBuffer}
-BART_MRB <- multipleRingBuffer(st_union(BART_Stops_SF), 47520, 2640)
+```{r multipleRingBuffer bay, message = FALSE, warning = FALSE}
+BART_MRB_bay <- multipleRingBuffer(st_union(BART_Stops_bay), 47520, 2640)
 
-allTracts.rings <-
-  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
-          BART_MRB) %>%
+allTracts.rings_bay <-
+  st_join(st_centroid(dplyr::select(allTracts_bay, GEOID, year)),
+          BART_MRB_bay) %>%
   st_drop_geometry() %>%
-  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
+  left_join(dplyr::select(allTracts_bay, GEOID, MedRent, year), 
             by=c("GEOID"="GEOID", "year"="year")) %>%
   st_sf() %>%
   mutate(distance = distance / 5280) #convert to miles
 
-allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
+allTracts.rings.summary_bay <- st_drop_geometry(allTracts.rings_bay) %>%
     group_by(distance, year) %>%
     summarize(Mean_Rent = mean(MedRent, na.rm=T))
 
-ggplot(allTracts.rings.summary,
+bay_lines <- ggplot(allTracts.rings.summary_bay,
        aes(distance, Mean_Rent, colour=year)) +
       geom_point(size=3) + 
-  geom_line(size=2)
+  geom_line(size=2)+
+  scale_x_continuous(limits = c(0, 10))+
+  scale_y_continuous(limits = c(0, 2100))
 
+BART_MRB_sf <- multipleRingBuffer(st_union(BART_Stops_sf), 47520, 2640)
 
+allTracts.rings_sf <-
+  st_join(st_centroid(dplyr::select(allTracts_sf, GEOID, year)),
+          BART_MRB_sf) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts_sf, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
 
+allTracts.rings.summary_sf <- st_drop_geometry(allTracts.rings_sf) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+sf_lines <- ggplot(allTracts.rings.summary_sf,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)+
+  scale_x_continuous(limits = c(0, 10))+
+  scale_y_continuous(limits = c(0, 2100))
+
+grid.arrange(bay_lines, sf_lines)
 ```
+
+
 
