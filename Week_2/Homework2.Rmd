@@ -23,7 +23,7 @@ rm(list=ls())
 ```{r setup packages, message = FALSE, warning = FALSE}
 # Load Libraries
 
-#install.packages("gridExtra")
+install.packages("gridExtra")
 
 
 library(tidyverse)
@@ -51,113 +51,80 @@ census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
 
 ```
 
-## Wrangling 2009 Census Tract data for both San Francisco and the Bay Area
+## Wrangling 2009 and 2017 Census Tract ACS data for both the Bay Area and San Francisco
 
-```{r tracts09, message = FALSE, warning = FALSE, results = "hide"}
+```{r tractsData, message = FALSE, warning = FALSE, results = "hide"}
+#2009 ACS data for Bay Area
+
 tracts09_bay <- 
   get_acs(geography = "tract", 
-          variables = c("B25026_001E","B02001_002E",
-                        "B15001_050E","B15001_009E",
-                        "B19013_001E","B25058_001E",
-                        "B06012_002E"), 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
           year=2009, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
          MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>% 
+         MedRent = B25058_001E) %>% 
   mutate(area = st_area(geometry)) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2009", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+  mutate(year = "2009", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+#2009 ACS data for San Francisco only
 
 tracts09_sf <- 
   get_acs(geography = "tract", 
-          variables = c("B25026_001E","B02001_002E",
-                        "B15001_050E","B15001_009E",
-                        "B19013_001E","B25058_001E",
-                        "B06012_002E"), 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
           year=2009, state=06, county="075", 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
          MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>% 
+         MedRent = B25058_001E) %>% 
   mutate(area = st_area(geometry)) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2009", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+  mutate(year = "2009", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
 
-```
-## Wrangling 2017 Census Tract data for both San Francisco and the Bay Area
+#2017 ACS data for Bay Area
 
-```{r tracts17, message = FALSE, warning = FALSE, results = "hide"}
 tracts17_bay <- 
   get_acs(geography = "tract", 
-          variables = c("B25026_001E","B02001_002E",
-                        "B15001_050E","B15001_009E",
-                        "B19013_001E","B25058_001E",
-                        "B06012_002E"), 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
           year=2017, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
          MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>% 
+         MedRent = B25058_001E) %>% 
   mutate(area = st_area(geometry)) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2017", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+  mutate(year = "2017", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+#2017 ACS data for San Francisco only
 
 tracts17_sf <- 
   get_acs(geography = "tract", 
-          variables = c("B25026_001E","B02001_002E",
-                        "B15001_050E","B15001_009E",
-                        "B19013_001E","B25058_001E",
-                        "B06012_002E"), 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
           year=2017, state=06, county="075", 
           geometry=TRUE, output="wide") %>%
   st_transform('EPSG:2227') %>%
   rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
          MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E) %>% 
+         MedRent = B25058_001E) %>% 
   mutate(area = st_area(geometry)) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2017", density = drop_units((TotalPop / (area * 0.00000003587 )))) %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
-
-```
-### Connecting both years' tract data for both san Francisco and the Bay Area
-
-```{r bind tracts, message = FALSE, warning = FALSE}
+  mutate(year = "2017", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
 
 allTracts_bay <- rbind(tracts09_bay,tracts17_bay)
 
@@ -187,7 +154,7 @@ BART_Stops_sf <- BART_Stops_bay[as.vector(indices), ]
 
 ```{r Crop Size, message = FALSE, warning = FALSE}
 #Buffer Bart stops for Bounding Box
-Buffer4Crop <- st_union(st_buffer(BART_Stops_bay, (8*2640))) %>%
+Buffer4Crop <- st_union(st_buffer(BART_Stops_bay, (15*2640))) %>%
       st_sf() %>%
       mutate(Legend = "Crop Buffer")
 
@@ -202,7 +169,9 @@ cropped_allTracts_bay <- st_crop(allTracts_bay, bbox_Buffer4Crop)
 cropped_allTracts_sf <- st_crop(allTracts_sf, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 
 ```
+
 ## Creating buffers
+
 ```{r BART Stops Buffer, message = FALSE, warning = FALSE}
 
 BART_Stops_bay_Buffers <- 
@@ -251,6 +220,7 @@ selectCentroids_sf <-
   mutate(Selection_Type = "Select by Centroids")
 
 ```
+
 ## Mapping Census tracts near transit stations
 
 ```{r Stations with Tract Selection, message = FALSE, warning = FALSE}
@@ -303,7 +273,8 @@ allTracts.group_sf <-
 
 # Should do for SF only, too large of an area to compare
 ```
-## Mapping indicators
+
+## Time/Space Groups
 
 ### TOD vs. Non TOD
 
@@ -311,42 +282,7 @@ allTracts.group_sf <-
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = TOD)) +
-    labs(title = "Time/Space Groups", subtitle = "TOD vs Non-TOD") +
-    facet_wrap(~year)+
-    mapTheme() + 
-    theme(plot.title = element_text(size=22))
-```
-### Total Population
-
-```{r total pop map sf, message = FALSE, warning = FALSE}
-ggplot(allTracts.group_sf)+
-    geom_sf(data = st_union(cropped_allTracts_sf))+
-    geom_sf(aes(fill = TotalPop)) +
-    labs(title = "Time/Space Groups", subtitle = "Total Population") +
-    facet_wrap(~year)+
-    mapTheme() + 
-    theme(plot.title = element_text(size=22))
-```
-
-### Median Household Income
-
-```{r medhhinc map sf, message = FALSE, warning = FALSE}
-ggplot(allTracts.group_sf)+
-    geom_sf(data = st_union(cropped_allTracts_sf))+
-    geom_sf(aes(fill = MedHHInc)) +
-    labs(title = "Time/Space Groups", subtitle = "Median Household Income") +
-    facet_wrap(~year)+
-    mapTheme() + 
-    theme(plot.title = element_text(size=22))
-```
-
-### Median Rent
-
-```{r medrent map sf, message = FALSE, warning = FALSE}
-ggplot(allTracts.group_sf)+
-    geom_sf(data = st_union(cropped_allTracts_sf))+
-    geom_sf(aes(fill = MedRent)) +
-    labs(title = "Time/Space Groups", subtitle = "Median Rent") +
+    labs(title = "TOD vs Non-TOD") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -358,11 +294,46 @@ ggplot(allTracts.group_sf)+
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = density)) +
-    labs(title = "Time/Space Groups", subtitle = "Density") +
+    labs(title = "Density") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
 
+### Median Household Income
+
+```{r medhhinc map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = MedHHInc)) +
+    labs(title = "Median Household Income") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+```
+
+### Total Population
+
+```{r total pop map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = TotalPop)) +
+    labs(title = "Total Population") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+```
+
+### Median Rent
+
+```{r medrent map sf, message = FALSE, warning = FALSE}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = MedRent)) +
+    labs(title = "Median Rent") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
 ```
 
 ## Plotting indicators
@@ -371,52 +342,39 @@ ggplot(allTracts.group_sf)+
 allTracts.Summary_bay <- 
   st_drop_geometry(allTracts.group_bay) %>%
   group_by(year, TOD) %>%
-  summarize(Rent = mean(MedRent, na.rm = T),
-            Population = mean(TotalPop, na.rm = T),
-            #Percent_White = mean(pctWhite, na.rm = T),
-            Density = mean(density, na.rm = T),
-            Percent_Poverty = mean(pctPoverty, na.rm = T))
+  summarize(Population = mean(TotalPop, na.rm = T),
+            Income = mean(MedHHInc, na.rm = T),
+            Rent = mean(MedRent, na.rm = T),
+            Density = mean(density, na.rm = T))
 
-# kable(allTracts.Summary_bay) %>%
-#   kable_styling() %>%
-#   footnote(general_title = "\n",
-#            general = "Table 2.2")
-```
-
-```{r TOD Indicator Table sf, message = FALSE, warning = FALSE}
 allTracts.Summary_sf <- 
   st_drop_geometry(allTracts.group_sf) %>%
   group_by(year, TOD) %>%
-  summarize(Rent = mean(MedRent, na.rm = T),
-            Population = mean(TotalPop, na.rm = T),
-            #Percent_White = mean(pctWhite, na.rm = T),
-            Density = mean(density, na.rm = T),
-            Percent_Poverty = mean(pctPoverty, na.rm = T))
+  summarize(Population = mean(TotalPop, na.rm = T),
+            Income = mean(MedHHInc, na.rm = T),
+            Rent = mean(MedRent, na.rm = T),
+            Density = mean(density, na.rm = T))
 
-# kable(allTracts.Summary_sf) %>%
-#   kable_styling() %>%
-#   footnote(general_title = "\n",
-#            general = "Table 2.2")
 ```
 
-### Bay Area
+### Plotting indicators across time and space
 ```{r TOD indicator Plots bay, message = FALSE, warning = FALSE}
 bay_plot <- allTracts.Summary_bay %>%
   gather(Variable, Value, -year, -TOD) %>%
   ggplot(aes(year, Value, fill = TOD)) +
   geom_bar(stat = "identity", position = "dodge") +
-  facet_wrap(~Variable, scales = "free", ncol=5) +
+  facet_wrap(~Variable, scales = "free", ncol=4) +
   scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
-  labs(title = "Bay Area Indicator differences across time and space") +
+  labs(title = "Bay Area") +
   plotTheme() + theme(legend.position="bottom")
 
 sf_plot <- allTracts.Summary_sf %>%
   gather(Variable, Value, -year, -TOD) %>%
   ggplot(aes(year, Value, fill = TOD)) +
   geom_bar(stat = "identity", position = "dodge") +
-  facet_wrap(~Variable, scales = "free", ncol=5) +
+  facet_wrap(~Variable, scales = "free", ncol=4) +
   scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
-  labs(title = "San Francisco Indicator differences across time and space") +
+  labs(title = "San Francisco") +
   plotTheme() + theme(legend.position="bottom")
 
 grid.arrange(bay_plot, sf_plot)
@@ -433,9 +391,7 @@ allTracts.Summary_bay %>%
   mutate(Value = round(Value, 2)) %>%
   spread(year.TOD, Value) %>%
   kable() %>%
-  kable_styling() %>%
-  footnote(general_title = "\n",
-           general = "Table 2.3")
+  kable_styling()
 ```
 
 ### San Francisco only
@@ -447,9 +403,7 @@ allTracts.Summary_sf %>%
   mutate(Value = round(Value, 2)) %>%
   spread(year.TOD, Value) %>%
   kable() %>%
-  kable_styling() %>%
-  footnote(general_title = "\n",
-           general = "Table 2.3")
+  kable_styling()
 ```
 
 ## Graduated Symbol Maps
