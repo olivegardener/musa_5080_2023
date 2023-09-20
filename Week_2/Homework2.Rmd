@@ -278,7 +278,8 @@ allTracts.group_sf <-
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = TOD)) +
-    labs(title = "TOD vs Non-TOD") +
+    labs(title = "TOD vs Non-TOD",
+         fill = "Type") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -290,7 +291,9 @@ ggplot(allTracts.group_sf)+
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = density)) +
-    labs(title = "Density") +
+    scale_fill_gradient(low = "white",high = "red4") +
+    labs(title = "Population Density",
+         fill = "Per Square Mile") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -302,7 +305,9 @@ ggplot(allTracts.group_sf)+
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = MedHHInc)) +
-    labs(title = "Median Household Income") +
+    scale_fill_gradient(low = "white",high = "darkseagreen4") +
+    labs(title = "Median Household Income",
+         fill = "Dollars") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -314,7 +319,9 @@ ggplot(allTracts.group_sf)+
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = TotalPop)) +
-    labs(title = "Total Population") +
+    scale_fill_gradient(low = "white",high = "darkorchid4") +
+    labs(title = "Total Population",
+         fill = "Count") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -326,7 +333,9 @@ ggplot(allTracts.group_sf)+
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = MedRent)) +
-    labs(title = "Median Rent") +
+    scale_fill_gradient(low = "white",high = "cyan4") +
+    labs(title = "Median Rent",
+         fill = "Dollars") +
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
@@ -354,7 +363,7 @@ allTracts.Summary_sf <-
 ```
 
 ### Plotting indicators across time and space
-```{r TOD indicator Plots bay, message = FALSE, warning = FALSE}
+```{r TOD indicator Plots bay, message = FALSE, warning = FALSE, fig.height = 10}
 bay_plot <- allTracts.Summary_bay %>%
   gather(Variable, Value, -year, -TOD) %>%
   ggplot(aes(year, Value, fill = TOD)) +
