@@ -22,10 +22,6 @@ rm(list=ls())
 
 ```{r setup packages, message = FALSE, warning = FALSE}
 # Load Libraries
-
-install.packages("gridExtra")
-
-
 library(tidyverse)
 library(tidycensus)
 library(sf)
@@ -408,6 +404,17 @@ allTracts.Summary_sf %>%
 
 ## Graduated Symbol Maps
 ### San Francisco
+```{r graduated symbol map bay, message = FALSE, warning = FALSE}
+Stops_Individual_sf <- st_buffer(BART_Stops_sf, 2640)
+
+graduated_stops_sf <-
+  st_join(Stops_Individual_sf, st_centroid(cropped_allTracts_bay)) %>%
+  group_by(Name) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
+
+```
+
 ```{r}
 #Calc centroids
 tracts_centroids <- st_centroid(cropped_allTracts_sf)
@@ -490,8 +497,20 @@ stops_rent_sf <- ggplot() +
 grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
 
 ```  
+
 ## Graduated Symbol Maps
 ### Bay Area
+```{r graduated symbol map bay, message = FALSE, warning = FALSE}
+Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
+
+graduated_stops_bay <-
+  st_join(Stops_Individual_bay, st_centroid(cropped_allTracts_bay)) %>%
+  group_by(Name) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
+
+```
+
 ```{r}
 #Calc centroids
 tracts_centroids <- st_centroid(cropped_allTracts_bay)
@@ -568,44 +587,10 @@ stops_rent_sf <- ggplot() +
        size = "Mean Rent",
        fill = "Distance to Bart (mi)")  # Legend title
 
-# # Update the second plot
-# stops_rent_sf <- stops_rent_sf +
-#   labs(fill = "Distance to Bart (mi)") +  # Update legend title for fill
-#   guides(size = guide_legend(order = 1),  # Order for size legend
-#          fill = guide_legend(order = 2)) +  # Order for fill legend
-#   theme(legend.position = "bottom",       # Override common_theme for this plot
-#         legend.box = "vertical")
-
 # Arrange the plots side by side
 grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
 
 ```  
-
-
-```{r graduated symbol map bay, message = FALSE, warning = FALSE}
-Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
-
-graduated_stops_bay <-
-  st_join(Stops_Individual_bay, st_centroid(cropped_allTracts_bay)) %>%
-  group_by(Name) %>%
-  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
-            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
-stops_pop_bay <- ggplot()+
-  geom_sf(data = cropped_allTracts_bay, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops_bay),
-          aes(size = pop_0.5mi_sum)) +
-  scale_size_continuous(range = c(0.1,4))
-
-stops_rent_bay <-ggplot()+
-  geom_sf(data = cropped_allTracts_bay, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops_bay),
-          aes(size = rent_0.5mi_mean)) +
-  scale_size_continuous(range = c(0.1,4))
-
-grid.arrange(stops_pop_bay, stops_rent_bay)
-
-```
-
 
 ## Multiple Ring Buffer Analysis
 
