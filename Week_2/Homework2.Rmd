@@ -407,7 +407,180 @@ allTracts.Summary_sf %>%
 ```
 
 ## Graduated Symbol Maps
+### San Francisco
+```{r}
+#Calc centroids
+tracts_centroids <- st_centroid(cropped_allTracts_sf)
+
+# Initialize an empty vector to store distances
+nearest_distances <- vector("numeric", length = nrow(tracts_centroids))
+
+# Loop through each centroid to find the nearest point in FIRST and calculate the distance
+for (i in 1:nrow(tracts_centroids)) {
+  centroid <- tracts_centroids[i, ]
+  nearest_index <- st_nearest_feature(centroid, graduated_stops_sf)
+  nearest_point <- graduated_stops_sf[nearest_index, ]
+  distance <- st_distance(centroid, nearest_point)
+  
+  # Store the distance
+  nearest_distances[i] <- as.numeric(distance/5280)
+}
+
+# Add the distances to the DATABIZNESS dataframe
+cropped_allTracts_sf$Distance_to_BART <- nearest_distances
+```
+
+```{r graduated income symbol map sf, message = FALSE, warning = FALSE}
+# Define a common theme to remove axis text and ticks
+common_theme <- theme(
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  legend.position = "bottom",
+  legend.box = "vertical" # Move legend to bottom
+)
+
+# Create the first plot
+stops_pop_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_sf, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = cropped_allTracts_sf, fill = NA, alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(size = pop_0.5mi_sum),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 4)) +
+  scale_fill_distiller(palette = "Spectral") +
+  common_theme +
+  labs(title = "Population Within 0.5 miles of BART",  # Add title
+       size = "Population", # Legend title
+       fill = "Distance to Bart (mi)")  # legend title
+
+# Create the second plot
+stops_rent_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_sf, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = cropped_allTracts_sf, fill = NA, alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(size = rent_0.5mi_mean),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 4)) +
+  scale_fill_distiller(palette = "Spectral") +  
+  common_theme +
+  labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
+       size = "Mean Rent",  # Legend title
+       fill = "Distance to Bart (mi)")  # Legend title
+
+# Arrange the plots side by side
+grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
+
+```  
+## Graduated Symbol Maps
 ### Bay Area
+```{r}
+#Calc centroids
+tracts_centroids <- st_centroid(cropped_allTracts_bay)
+
+# Initialize an empty vector to store distances
+nearest_distances <- vector("numeric", length = nrow(tracts_centroids))
+
+# Loop through each centroid to find the nearest point in FIRST and calculate the distance
+for (i in 1:nrow(tracts_centroids)) {
+  centroid <- tracts_centroids[i, ]
+  nearest_index <- st_nearest_feature(centroid, graduated_stops_bay)
+  nearest_point <- graduated_stops_bay[nearest_index, ]
+  distance <- st_distance(centroid, nearest_point)
+  
+  # Store the distance
+  nearest_distances[i] <- as.numeric(distance/5280)
+}
+
+# Add the distances to the DATABIZNESS dataframe
+cropped_allTracts_bay$Distance_to_BART <- nearest_distances
+```
+
+```{r graduated income symbol map sf, message = FALSE, warning = FALSE}
+# Define a common theme to remove axis text and ticks
+common_theme <- theme(
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  legend.position = "bottom",
+  legend.box = "vertical" # Move legend to bottom
+)
+
+# Create the first plot
+stops_pop_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_bay, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(size = pop_0.5mi_sum),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 1.5)) +
+  scale_fill_distiller(palette = "Spectral") +
+  common_theme +
+  labs(title = "Population Within 0.5 miles of BART",  # Add title
+       size = "Population",
+       fill = "Distance to Bart (mi)")  # Legend title
+
+# Create the second plot
+stops_rent_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_bay, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(size = rent_0.5mi_mean),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 1.5)) +
+  scale_fill_distiller(palette = "Spectral") +  
+  common_theme +
+  labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
+       size = "Mean Rent",
+       fill = "Distance to Bart (mi)")  # Legend title
+
+# # Update the second plot
+# stops_rent_sf <- stops_rent_sf +
+#   labs(fill = "Distance to Bart (mi)") +  # Update legend title for fill
+#   guides(size = guide_legend(order = 1),  # Order for size legend
+#          fill = guide_legend(order = 2)) +  # Order for fill legend
+#   theme(legend.position = "bottom",       # Override common_theme for this plot
+#         legend.box = "vertical")
+
+# Arrange the plots side by side
+grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
+
+```  
+
 
 ```{r graduated symbol map bay, message = FALSE, warning = FALSE}
 Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
@@ -433,33 +606,7 @@ grid.arrange(stops_pop_bay, stops_rent_bay)
 
 ```
 
-## Graduated Symbol Maps
-### San Francisco
 
-```{r graduated income symbol map sf, message = FALSE, warning = FALSE}
-Stops_Individual_sf <- st_buffer(BART_Stops_sf, 2640)
-
-graduated_stops_sf <-
-  st_join(Stops_Individual_sf, st_centroid(cropped_allTracts_sf)) %>%
-  group_by(Name) %>%
-  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
-            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
-
-stops_pop_sf <- ggplot()+
-  geom_sf(data = cropped_allTracts_sf, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops_sf),
-          aes(size = pop_0.5mi_sum)) +
-  scale_size_continuous(range = c(0.1,4))
-
-stops_rent_sf <- ggplot()+
-  geom_sf(data = cropped_allTracts_sf, fill = "white") +
-  geom_sf(data = st_centroid(graduated_stops_sf),
-          aes(size = rent_0.5mi_mean)) +
-  scale_size_continuous(range = c(0.1,4))
-
-grid.arrange(stops_pop_sf, stops_rent_sf)
-```  
-  
 ## Multiple Ring Buffer Analysis
 
 ```{r multipleRingBuffer bay, message = FALSE, warning = FALSE}
