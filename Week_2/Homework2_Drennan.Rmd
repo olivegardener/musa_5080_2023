@@ -1,0 +1,771 @@
+---
+title: "San Francisco to the Bay"
+subtitle: "Determining if San Francisco residents value on transit-rich neighborhoods compared to others"
+author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
+date: '2023-09-21'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    number_sections: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+    
+---
+
+```{r setup clear environment,  include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+rm(list=ls())
+```
+
+# Motivation
+
+Transit-oriented development (TOD) seeks to connect residents with the means to easily and conveniently connect them elsewhere in the city and region. As a city with some of the highest population density in the United States along with jobs that send residents across the Bay Area, San Francisco provides the right conditions for TOD. However, residents ultimately determine how much they value TOD based on where they live and the amount they pay to live there. 
+
+Through this study, we examined four indicators of TOD - population density, median household income, total population, and median rent - to determine if San Franciscans value access to BART stops, which serve as a proxy for TOD areas. We also take a wider view by incorporating the full BART network to contextualize San Francisco within the Bay Area.      
+
+# Setup
+
+```{r install, include = FALSE}
+
+#install.packages("devtools")
+#devtools::install_github("kstagaman/autoNumCaptions")
+
+```
+
+```{r setup packages}
+
+# Load Libraries
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+library(RSocrata)
+library(dplyr)
+library(stringr)
+library(units)
+library(gridExtra)
+library(autoNumCaptions)
+
+# we don't want scientific notation
+options(scipen=999)
+
+# set default class to return the spatial data as sf objects by default
+options(tigris_class = "sf")
+
+# load custom functions from the book
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
+
+census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
+
+```
+
+## Wrangling 2009 and 2017 Census Tract ACS data for both the Bay Area and San Francisco
+
+```{r tractsData, results = "hide"}
+#2009 ACS data for Bay Area
+
+tracts09_bay <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
+          year=2009, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2009", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+#2009 ACS data for San Francisco only
+
+tracts09_sf <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
+          year=2009, state=06, county="075", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2009", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+#2017 ACS data for Bay Area
+
+tracts17_bay <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
+          year=2017, state=06, county=c("001", "013", "041", "075", "081", "085", "095"), 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2017", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+#2017 ACS data for San Francisco only
+
+tracts17_sf <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E"), 
+          year=2017, state=06, county="075", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:2227') %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2017", 
+         density = drop_units((TotalPop / (area * 0.00000003587 ))))
+
+allTracts_bay <- rbind(tracts09_bay,tracts17_bay)
+
+allTracts_sf <- rbind(tracts09_sf,tracts17_sf)
+
+```
+
+## Wrangling Transit Open Data
+
+```{r Wrangle Transit Data, results = 'hide'}
+BART_Stops_bay <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
+
+BART_Stops_bay <- BART_Stops_bay %>%
+  st_transform(2227)
+
+sf_outline <- st_union(tracts09_sf)
+
+# Find the points that are within the boundary
+indices <- st_within(BART_Stops_bay, sf_outline, sparse = FALSE)
+
+# Create a new sf object containing only the points within the boundary
+BART_Stops_sf <- BART_Stops_bay[as.vector(indices), ]
+
+```
+
+## Cropping the extent to show relevant areas
+
+```{r Crop Size}
+#Buffer Bart stops for Bounding Box
+Buffer4Crop <- st_union(st_buffer(BART_Stops_bay, (15*2640))) %>%
+      st_sf() %>%
+      mutate(Legend = "Crop Buffer")
+
+# Get the bounding box of Buffer4Crop
+bbox_Buffer4Crop <- st_bbox(Buffer4Crop)
+
+# Crop allTracts using the bounding box of Buffer4Crop
+cropped_allTracts_bay <- st_crop(allTracts_bay, bbox_Buffer4Crop)
+
+
+#Crop SF only, no Farallon Islands
+cropped_allTracts_sf <- st_crop(allTracts_sf, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
+
+```
+
+## Creating buffers
+
+```{r BART Stops Buffer}
+
+BART_Stops_bay_Buffers <- 
+  rbind(
+    st_buffer(BART_Stops_bay, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(BART_Stops_bay, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+BART_Stops_sf_Buffers <- 
+  rbind(
+    st_buffer(BART_Stops_sf, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(BART_Stops_sf, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+buffer_bay <- filter(BART_Stops_bay_Buffers, Legend =="Unioned Buffer")
+
+buffer_sf <- filter(BART_Stops_sf_Buffers, Legend =="Unioned Buffer")
+
+```
+
+## Selecting TOD-designated Census tracts by centroids
+
+```{r Select Centroids}
+#is this right to select based on tracts09?
+
+selectCentroids_bay <-
+  st_centroid(tracts09_bay)[buffer_bay,] %>%
+  st_drop_geometry() %>%
+  left_join(., dplyr::select(tracts09_bay, GEOID), by = "GEOID") %>%
+  st_sf() %>%
+  dplyr::select(TotalPop, MedRent) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+selectCentroids_sf <-
+  st_centroid(tracts09_sf)[buffer_sf,] %>%
+  st_drop_geometry() %>%
+  left_join(., dplyr::select(tracts09_sf, GEOID), by = "GEOID") %>%
+  st_sf() %>%
+  dplyr::select(TotalPop, MedRent) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+```
+
+## Mapping Census tracts near transit stations
+
+```{r Stations with Tract Selection, fig.show ='hide'}
+ggplot() +
+  geom_sf(data=selectCentroids_bay, aes(fill = TotalPop)) +
+  geom_sf(data=BART_Stops_bay, show.legend = "point") +
+  scale_fill_viridis_c() +
+  mapTheme()
+
+ggplot() +
+  geom_sf(data=selectCentroids_sf, aes(fill = TotalPop)) +
+  geom_sf(data=BART_Stops_sf, show.legend = "point") +
+  scale_fill_viridis_c() +
+  mapTheme()
+
+```
+
+# Comparing Indicators
+
+```{r Indicator Maps}
+allTracts.group_bay <- 
+  rbind(
+    st_centroid(allTracts_bay)[buffer_bay,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts_bay) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts_bay)[buffer_bay, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts_bay) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.15, MedRent)) %>%
+  mutate(MedHHInc.inf = ifelse(year == "2009", MedHHInc * 1.15, MedHHInc)) %>%
+      st_join(BART_Stops_bay)
+
+allTracts.group_sf <- 
+  rbind(
+    st_centroid(cropped_allTracts_sf)[buffer_sf,] %>%
+      st_drop_geometry() %>%
+      left_join(cropped_allTracts_sf) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(cropped_allTracts_sf)[buffer_sf, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(cropped_allTracts_sf) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+    mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.15, MedRent)) %>%
+  mutate(MedHHInc.inf = ifelse(year == "2009", MedHHInc * 1.15, MedHHInc)) %>%
+      st_join(BART_Stops_sf)
+
+# Should do for SF only, too large of an area to compare
+```
+
+## Time/Space Groups
+
+### TOD vs. Non TOD
+
+```{r TOD and Non-TOD map sf}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = TOD)) +
+    geom_sf(data = BART_Stops_sf, col = "black")+
+    #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
+    labs(title = "TOD vs Non-TOD",
+         fill = "Type") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))+
+    gg_figure_caption(
+      caption = "TOD vs Non-TOD tract selection by year"
+    )
+```
+TOD areas were chosen by determining what Census tracts are within half a mile of a BART stop. While the BART system is not the only public transit option within the city, the network provides access to major commercial areas in San Francisco as well as jobs and other activities throughout the Bay Area.
+
+### Population Density per Square Mile
+
+```{r density map sf}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = density)) +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = BART_Stops_sf, col = "black")+
+    #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
+    scale_fill_gradient(low = "white",high = "red4") +
+    labs(title = "Population Density",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red",
+         fill = "Per Square Mile") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))+
+    gg_figure_caption(
+      caption = "Population density per square mile by year"
+    )
+```
+
+Given that San Francisco already has a high population density per square mile compared to most other major cities in the United States, the city does not appear to have changed dramatically between 2009 and 2017. 
+
+As figure 2 suggests, tracts inside and outside the TOD show similar population densities across years, with the exception of a few smaller Census tracts within the northern part of the TOD area in downtown San Francisco. 
+
+Note, the increased density downtown may also be the result of Census tracts splitting due to total population changes based on US Census Bureau methodology.
+
+### Median Household Income
+
+```{r medhhinc map sf}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = MedHHInc.inf)) +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = BART_Stops_sf, col = "black")+
+    #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
+    scale_fill_gradient(low = "white",high = "darkseagreen4") +
+    labs(title = "Median Household Income",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation adjusted to 2017 dollars",
+         fill = "Dollars") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))+
+    gg_figure_caption(
+      caption = "Median household income by year"
+    )
+```
+
+While figure 2 highlighted little change in population density across the city, this map shows increases in median household income across the city, but especially in non-TOD areas. 
+
+One possible explanation is that even adjusted for inflation, households in Census tracts outside of the TOD area saw wage growth higher than inflation. Alternatively, high income households in those areas may have pushed out lower income households. This period (2009 to 2017) saw major growth in the tech sector and given that San Francisco is a major hub for that industry, this map may reflect that growth.
+
+### Total Population
+
+```{r total pop map sf}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = TotalPop)) +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = BART_Stops_sf, col = "black")+
+    #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
+    scale_fill_gradient(low = "white",high = "darkorchid4") +
+    labs(title = "Total Population",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red",
+         fill = "Count") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))+
+    gg_figure_caption(
+      caption = "Total population by year"
+    )
+```
+
+The population density shown in figure 2 may reflect infill development and where higher density development has occurred, but total population counts can reflect the overall desirability of a neighborhood and potentially the total potential customer base for transit services.
+
+This map shows some changes between years throughout San Francisco, especially in the northeast corner of the city. Downtown areas especially appear to have a higher population in 2017 compared to 2009. However, similar to population density, these changes may be influenced by changes in US Census Bureau methodology.
+
+### Median Rent
+
+```{r medrent map sf}
+ggplot(allTracts.group_sf)+
+    geom_sf(data = st_union(cropped_allTracts_sf))+
+    geom_sf(aes(fill = MedRent.inf)) +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = BART_Stops_sf, col = "black")+
+    #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
+    scale_fill_gradient(low = "white",high = "cyan4") +
+    labs(title = "Median Rent",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation adjusted to 2017 dollars",
+         fill = "Dollars") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))+
+    gg_figure_caption(
+      caption = "Median rent by year"
+    )
+```
+
+Much like figure 3 and median household income, median rents appear to follow a similar pattern where the most growth in median rent prices occurred in areas outside of the TOD. As the higher income households have moved into neighborhoods outside of the TOD, they have likely increased the rent costs for the area.
+
+## Plotting indicators
+
+```{r TOD Indicator Table bay}
+allTracts.Summary_bay <- 
+  st_drop_geometry(allTracts.group_bay) %>%
+  group_by(year, TOD) %>%
+  summarize(Population = mean(TotalPop, na.rm = T),
+            Income = mean(MedHHInc, na.rm = T),
+            Rent = mean(MedRent, na.rm = T),
+            Density = mean(density, na.rm = T))
+
+allTracts.Summary_sf <- 
+  st_drop_geometry(allTracts.group_sf) %>%
+  group_by(year, TOD) %>%
+  summarize(Population = mean(TotalPop, na.rm = T),
+            Income = mean(MedHHInc, na.rm = T),
+            Rent = mean(MedRent, na.rm = T),
+            Density = mean(density, na.rm = T))
+
+```
+
+## TOD Indicators
+
+### San Francisco
+
+```{r kable table sf}
+allTracts.Summary_sf %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable(caption = table.caption("This table compares TOD and non-TOD indicators across years for San    Francisco")) %>%
+  kable_styling()
+```
+
+### Bay Area
+
+```{r kable table bay}
+allTracts.Summary_bay %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable(caption = table.caption("This table compares TOD and non-TOD indicators across years for the Bay Area")) %>%
+  kable_styling()
+```
+
+### Plotting indicators across time and space
+
+```{r TOD indicator Plots bay, fig.height = 15}
+bay_plot <- allTracts.Summary_bay %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=4) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "Bay Area") +
+  plotTheme() + theme(legend.position="bottom", plot.margin = unit(c(2,1,1,1),"cm"))+
+  xlab("Year")+
+  gg_figure_caption(
+      caption = "Bay Area TOD analysis indicators"
+  )
+
+sf_plot <- allTracts.Summary_sf %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=4) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "San Francisco") +
+  plotTheme() + theme(legend.position="bottom", plot.margin =unit(c(1,1,2,1),"cm"))+
+  xlab("Year")+
+  gg_figure_caption(
+      caption = "San Francisco TOD analysis indicators"
+  )
+
+grid.arrange(sf_plot, bay_plot)
+```
+
+## Graduated Symbol Maps
+### San Francisco
+
+```{r graduated symbol map sf}
+Stops_Individual_sf <- st_buffer(BART_Stops_sf, 2640)
+
+graduated_stops_sf <-
+  st_join(Stops_Individual_sf, st_centroid(cropped_allTracts_bay)) %>%
+  group_by(Name) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
+
+```
+
+```{r graduated map sf setup}
+#Calc centroids
+tracts_centroids <- st_centroid(cropped_allTracts_sf)
+
+# Initialize an empty vector to store distances
+nearest_distances <- vector("numeric", length = nrow(tracts_centroids))
+
+# Loop through each centroid to find the nearest point in FIRST and calculate the distance
+for (i in 1:nrow(tracts_centroids)) {
+  centroid <- tracts_centroids[i, ]
+  nearest_index <- st_nearest_feature(centroid, graduated_stops_sf)
+  nearest_point <- graduated_stops_sf[nearest_index, ]
+  distance <- st_distance(centroid, nearest_point)
+  
+  # Store the distance
+  nearest_distances[i] <- as.numeric(distance/5280)
+}
+
+# Add the distances to the DATABIZNESS dataframe
+cropped_allTracts_sf$Distance_to_BART <- nearest_distances
+```
+
+```{r graduated income symbol map sf}
+# Define a common theme to remove axis text and ticks
+common_theme <- theme(
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  legend.position = "bottom",
+  legend.box = "vertical" # Move legend to bottom
+)
+
+# Create the first plot
+stops_pop_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_sf, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = cropped_allTracts_sf, fill = NA, alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(size = pop_0.5mi_sum),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 4)) +
+  scale_fill_distiller(palette = "Spectral") +
+  common_theme +
+  labs(title = "Population Within 0.5 miles of BART",  # Add title
+       size = "Population", # Legend title
+       fill = "Distance to Bart (mi)") +   # legend title
+  gg_figure_caption(
+      caption = "Proportional population by BART Stop (San Francisco)",
+      caption.width = 50
+  )
+
+# Create the second plot
+stops_rent_sf <- ggplot() +
+  geom_sf(data = cropped_allTracts_sf, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = cropped_allTracts_sf, fill = NA, alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(size = rent_0.5mi_mean),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_sf), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 4)) +
+  scale_fill_distiller(palette = "Spectral") +  
+  common_theme +
+  labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
+       size = "Mean Rent",  # Legend title
+       fill = "Distance to Bart (mi)") +  # Legend title
+  gg_figure_caption(
+      caption = "Proportional mean rent by BART Stop (San Francisco)",
+      caption.width = 50
+  )
+  
+# Arrange the plots side by side
+grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
+
+```  
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
+
+### Bay Area
+
+```{r graduated symbol map bay}
+Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
+
+graduated_stops_bay <-
+  st_join(Stops_Individual_bay, st_centroid(cropped_allTracts_bay)) %>%
+  group_by(Name) %>%
+  summarize(pop_0.5mi_sum = sum(TotalPop, na.rm = TRUE),
+            rent_0.5mi_mean = round(mean(MedRent, na.rm = TRUE), digits = 0))
+
+```
+
+```{r graduated map bay setup, message = FALSE}
+#Calc centroids
+tracts_centroids <- st_centroid(cropped_allTracts_bay)
+
+# Initialize an empty vector to store distances
+nearest_distances <- vector("numeric", length = nrow(tracts_centroids))
+
+# Loop through each centroid to find the nearest point in FIRST and calculate the distance
+for (i in 1:nrow(tracts_centroids)) {
+  centroid <- tracts_centroids[i, ]
+  nearest_index <- st_nearest_feature(centroid, graduated_stops_bay)
+  nearest_point <- graduated_stops_bay[nearest_index, ]
+  distance <- st_distance(centroid, nearest_point)
+  
+  # Store the distance
+  nearest_distances[i] <- as.numeric(distance/5280)
+}
+
+# Add the distances to the DATABIZNESS dataframe
+cropped_allTracts_bay$Distance_to_BART <- nearest_distances
+```
+
+```{r graduated income symbol map bay}
+# Define a common theme to remove axis text and ticks
+common_theme <- theme(
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  legend.position = "bottom",
+  legend.box = "vertical" # Move legend to bottom
+)
+
+# Create the first plot
+stops_pop_bay <- ggplot() +
+  geom_sf(data = cropped_allTracts_bay, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(size = pop_0.5mi_sum),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 1.5)) +
+  scale_fill_distiller(palette = "Spectral") +
+  common_theme +
+  labs(title = "Population Within 0.5 miles of BART",  # Add title
+       size = "Population",
+       fill = "Distance to Bart (mi)")+   # legend title
+  gg_figure_caption(
+      caption = "Proportional population by BART Stop (Bay Area)",
+      caption.width = 50
+  )
+
+# Create the second plot
+stops_rent_bay <- ggplot() +
+  geom_sf(data = cropped_allTracts_bay, 
+          aes(fill = Distance_to_BART),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.5) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(size = rent_0.5mi_mean),
+          color = 'black',
+          alpha = 0.75) +
+  geom_sf(data = st_centroid(graduated_stops_bay), 
+          aes(),
+          color = 'black',
+          shape = 3,
+          size = 0.5) +
+  scale_size_continuous(range = c(0.1, 1.5)) +
+  scale_fill_distiller(palette = "Spectral") +  
+  common_theme +
+  labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
+       size = "Mean Rent",
+       fill = "Distance to Bart (mi)") +  # Legend title
+  gg_figure_caption(
+      caption = "Proportional mean rent by BART Stop (Bay Area)",
+      caption.width = 50
+  ) 
+
+# Arrange the plots side by side
+grid.arrange(stops_pop_bay, stops_rent_bay, ncol = 2)
+
+```  
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+## Multiple Ring Buffer Analysis
+
+```{r multipleRingBuffer bay}
+
+BART_MRB_sf <- multipleRingBuffer(st_union(BART_Stops_sf), 47520, 2640)
+
+allTracts.rings_sf <-
+  st_join(st_centroid(dplyr::select(allTracts_sf, GEOID, year)),
+          BART_MRB_sf) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts_sf, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+allTracts.rings.summary_sf <- st_drop_geometry(allTracts.rings_sf) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+sf_lines <- ggplot(allTracts.rings.summary_sf,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)+
+  scale_x_continuous(limits = c(0, 10))+
+  scale_y_continuous(limits = c(0, 2100))+
+  xlab("Distance (mi)")+
+  ylab("Mean Rent ($)")+
+  gg_figure_caption(
+      caption = "Mean Rent as a function of distance to BART stop (San Francisco)",
+  )
+
+BART_MRB_bay <- multipleRingBuffer(st_union(BART_Stops_bay), 47520, 2640)
+
+allTracts.rings_bay <-
+  st_join(st_centroid(dplyr::select(allTracts_bay, GEOID, year)),
+          BART_MRB_bay) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts_bay, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+allTracts.rings.summary_bay <- st_drop_geometry(allTracts.rings_bay) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+bay_lines <- ggplot(allTracts.rings.summary_bay,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)+
+  scale_x_continuous(limits = c(0, 10))+
+  scale_y_continuous(limits = c(0, 2100))+
+  xlab("Distance (mi)")+
+  ylab("Mean Rent ($)")+
+  gg_figure_caption(
+      caption = "Mean Rent as a function of distance to BART stop (Bay Area)",
+  )
+
+
+
+grid.arrange(sf_lines, bay_lines)
+```
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+# Conclusion
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
