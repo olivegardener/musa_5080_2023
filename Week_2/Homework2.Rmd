@@ -21,17 +21,21 @@ rm(list=ls())
 ```
 
 # Motivation
+<<<<<<< Updated upstream
 
 Transit-oriented development (TOD) seeks to connect residents with the means to easily and conveniently connect them elsewhere in the city and region. As a city with some of the highest population density in the United States along with jobs that send residents across the Bay Area, San Francisco provides the right conditions for TOD. However, residents ultimately determine how much they value TOD based on where they live and the amount they pay to live there. 
 
 In this study, we examine four markers of TOD - population density, median household income, total population, and median rent - to determine if San Franciscans value access to BART stops, which serve as a proxy for TOD areas. We also take a wider view by incorporating the full BART network to contextualize San Francisco within the Bay Area. Ultimately, our analysis does not indicate that residents particularly value TOD areas over non-TOD areas       
+=======
+Transit is the backbone of development. It influences how and where development occurs, and who lives nearby. But the link between transit, demographics, and development varies from place to place. This project investigates the relationship between transit and other factors of the urban landscape in San Francisco and the broader Bay Area.
+>>>>>>> Stashed changes
 
 # Setup
 
 ```{r install, include = FALSE}
 
 # install.packages("devtools")
-#devtools::install_github("kstagaman/autoNumCaptions")
+# devtools::install_github("kstagaman/autoNumCaptions")
 
 ```
 
@@ -452,7 +456,7 @@ sf_plot <- allTracts.Summary_sf %>%
       caption = "San Francisco TOD analysis indicators"
   )
 
-grid.arrange(bay_plot, sf_plot)
+grid.arrange(sf_plot, bay_plot)
 ```
 
 ## TOD Indicator Tables
@@ -764,6 +768,6 @@ grid.arrange(sf_lines, bay_lines)
 
 # Conclusion
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+The presence of public transit in both San Francisco and the Bay Area appears to be correlated with areas of higher density and lower rent. In a region with one of the most severe housing crises in the country, density and affordability are of paramount importance. This research does not suggest that TOD is an especially profitable MO for developers; rather it suggests that the city should incentivize TOD through tax breaks and direct subsidy for developers who pursue it.
 
 
