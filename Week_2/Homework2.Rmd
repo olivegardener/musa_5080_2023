@@ -1,7 +1,8 @@
 ---
-title: "Homework 2"
+title: "San Francisco to the Bay"
+subtitle: "Determining if San Francisco residents value on transit-rich neighborhoods compared to others"
 author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
-date: '2023-09-19'
+date: '2023-09-21'
 output: 
   html_document:
     toc: true
@@ -21,7 +22,9 @@ rm(list=ls())
 
 # Motivation
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
+Transit-oriented development (TOD) seeks to connect residents with the means to easily and conveniently connect them elsewhere in the city and region. As a city with some of the highest population density in the United States along with jobs that send residents across the Bay Area, San Francisco provides the right conditions for TOD. However, residents ultimately determine how much they value TOD based on where they live and the amount they pay to live there. 
+
+In this study, we examine four markers of TOD - population density, median household income, total population, and median rent - to determine if San Franciscans value access to BART stops, which serve as a proxy for TOD areas. We also take a wider view by incorporating the full BART network to contextualize San Francisco within the Bay Area. Ultimately, our analysis does not indicate that residents particularly value TOD areas over non-TOD areas       
 
 # Setup
 
@@ -288,7 +291,7 @@ allTracts.group_sf <-
 
 ### TOD vs. Non TOD
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+TOD areas were chosen by determining what Census tracts are within half a mile of a BART stop. 
 
 ```{r TOD and Non-TOD map sf}
 ggplot(allTracts.group_sf)+
