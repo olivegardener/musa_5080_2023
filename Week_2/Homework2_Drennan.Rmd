@@ -1,8 +1,8 @@
 ---
 title: "San Francisco to the Bay"
-subtitle: "Determining if San Francisco residents value on transit-rich neighborhoods compared to others"
+subtitle: "Determining if San Francisco residents value transit-rich neighborhoods compared to others"
 author: "Oliver Atwood + Dave Drennan + Trevor Kapuvari"
-date: '2023-09-21'
+date: '2023-09-22'
 output: 
   html_document:
     toc: true
@@ -22,20 +22,18 @@ rm(list=ls())
 
 # Motivation
 
-Transit-oriented development (TOD) seeks to connect residents with the means to easily and conveniently connect them elsewhere in the city and region. As a city with some of the highest population density in the United States along with jobs that send residents across the Bay Area, San Francisco provides the right conditions for TOD. However, residents ultimately determine how much they value TOD based on where they live and the amount they pay to live there. 
+Transit-oriented development (TOD) seeks to connect residents with easy and convenient transit throughout a city and/or region. As a city with one of the highest population densities in the United States, San Francisco provides the right conditions for TOD to send residents to jobs and activities across the Bay Area. However, residents ultimately determine how much they value TOD based on where they live and the amount they pay to live there. 
 
-Through this study, we examined four indicators of TOD - population density, median household income, total population, and median rent - to determine if San Franciscans value access to BART stops, which serve as a proxy for TOD areas. We also take a wider view by incorporating the full BART network to contextualize San Francisco within the Bay Area.      
+Through this study, we examine four indicators of TOD - population density, median household income, total population, and median rent - to determine if San Franciscans value proximity to BART stops. We also take a wider view by incorporating the full BART network to contextualize San Francisco within the Bay Area.      
 
 # Setup
 
-```{r install, include = FALSE}
+```{r tractsData, results = "hide", fig.show='hide'}
+
+#Bundling data setup without outputs to limit appearance of technical code chunks in policy brief
 
 #install.packages("devtools")
 #devtools::install_github("kstagaman/autoNumCaptions")
-
-```
-
-```{r setup packages}
 
 # Load Libraries
 library(tidyverse)
@@ -62,11 +60,7 @@ palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
 
 census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
 
-```
-
-## Wrangling 2009 and 2017 Census Tract ACS data for both the Bay Area and San Francisco
-
-```{r tractsData, results = "hide"}
+#Wrangling Census data
 #2009 ACS data for Bay Area
 
 tracts09_bay <- 
@@ -143,11 +137,7 @@ allTracts_bay <- rbind(tracts09_bay,tracts17_bay)
 
 allTracts_sf <- rbind(tracts09_sf,tracts17_sf)
 
-```
-
-## Wrangling Transit Open Data
-
-```{r Wrangle Transit Data, results = 'hide'}
+# Wrangling Transit Open Data
 BART_Stops_bay <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_2/data/BART_System.kml")
 
 BART_Stops_bay <- BART_Stops_bay %>%
@@ -161,11 +151,7 @@ indices <- st_within(BART_Stops_bay, sf_outline, sparse = FALSE)
 # Create a new sf object containing only the points within the boundary
 BART_Stops_sf <- BART_Stops_bay[as.vector(indices), ]
 
-```
-
-## Cropping the extent to show relevant areas
-
-```{r Crop Size}
+# Cropping the extent to show relevant areas
 #Buffer Bart stops for Bounding Box
 Buffer4Crop <- st_union(st_buffer(BART_Stops_bay, (15*2640))) %>%
       st_sf() %>%
@@ -181,12 +167,7 @@ cropped_allTracts_bay <- st_crop(allTracts_bay, bbox_Buffer4Crop)
 #Crop SF only, no Farallon Islands
 cropped_allTracts_sf <- st_crop(allTracts_sf, xmin = 6025077, xmax = 5957122, ymin = 2080091, ymax = 2137110)
 
-```
-
-## Creating buffers
-
-```{r BART Stops Buffer}
-
+# Creating buffers
 BART_Stops_bay_Buffers <- 
   rbind(
     st_buffer(BART_Stops_bay, 2640) %>%
@@ -209,12 +190,7 @@ buffer_bay <- filter(BART_Stops_bay_Buffers, Legend =="Unioned Buffer")
 
 buffer_sf <- filter(BART_Stops_sf_Buffers, Legend =="Unioned Buffer")
 
-```
-
-## Selecting TOD-designated Census tracts by centroids
-
-```{r Select Centroids}
-#is this right to select based on tracts09?
+# Selecting TOD-designated Census tracts by centroids
 
 selectCentroids_bay <-
   st_centroid(tracts09_bay)[buffer_bay,] %>%
@@ -232,11 +208,7 @@ selectCentroids_sf <-
   dplyr::select(TotalPop, MedRent) %>%
   mutate(Selection_Type = "Select by Centroids")
 
-```
-
-## Mapping Census tracts near transit stations
-
-```{r Stations with Tract Selection, fig.show ='hide'}
+# Mapping Census tracts near transit stations
 ggplot() +
   geom_sf(data=selectCentroids_bay, aes(fill = TotalPop)) +
   geom_sf(data=BART_Stops_bay, show.legend = "point") +
@@ -248,7 +220,6 @@ ggplot() +
   geom_sf(data=BART_Stops_sf, show.legend = "point") +
   scale_fill_viridis_c() +
   mapTheme()
-
 ```
 
 # Comparing Indicators
@@ -286,12 +257,11 @@ allTracts.group_sf <-
   mutate(MedHHInc.inf = ifelse(year == "2009", MedHHInc * 1.15, MedHHInc)) %>%
       st_join(BART_Stops_sf)
 
-# Should do for SF only, too large of an area to compare
 ```
 
-## Time/Space Groups
+## Mapping Indicators in 2009 and 2017
 
-### TOD vs. Non TOD
+### TOD vs. Non TOD Areas
 
 ```{r TOD and Non-TOD map sf}
 ggplot(allTracts.group_sf)+
@@ -299,7 +269,7 @@ ggplot(allTracts.group_sf)+
     geom_sf(aes(fill = TOD)) +
     geom_sf(data = BART_Stops_sf, col = "black")+
     #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
-    labs(title = "TOD vs Non-TOD",
+    labs(title = "TOD vs. Non-TOD Areas",
          fill = "Type") +
     facet_wrap(~year)+
     mapTheme() + 
@@ -308,7 +278,8 @@ ggplot(allTracts.group_sf)+
       caption = "TOD vs Non-TOD tract selection by year"
     )
 ```
-TOD areas were chosen by determining what Census tracts are within half a mile of a BART stop. While the BART system is not the only public transit option within the city, the network provides access to major commercial areas in San Francisco as well as jobs and other activities throughout the Bay Area.
+
+TOD areas were chosen by determining what Census tracts are within half a mile of a BART stop. While the BART system is not the only public transit option within the city, the BART network provides access to major commercial areas in San Francisco as well as jobs and other activities throughout the Bay Area.
 
 ### Population Density per Square Mile
 
@@ -331,11 +302,9 @@ ggplot(allTracts.group_sf)+
     )
 ```
 
-Given that San Francisco already has a high population density per square mile compared to most other major cities in the United States, the city does not appear to have changed dramatically between 2009 and 2017. 
+Given that San Francisco already has a high population density per square mile compared to most other major cities in the United States, it is unsurprising that density did not change dramatically between 2009 and 2017. Tracts inside and outside the TOD show similar population densities across years, with the exception of a few smaller Census tracts within the northern part of the TOD area in downtown San Francisco. The higher population densities in TOD areas could also reflect development that has already occurred for transit-rich areas in the city.
 
-As figure 2 suggests, tracts inside and outside the TOD show similar population densities across years, with the exception of a few smaller Census tracts within the northern part of the TOD area in downtown San Francisco. 
-
-Note, the increased density downtown may also be the result of Census tracts splitting due to total population changes based on US Census Bureau methodology.
+Note: the increased density downtown may reflect Census tracts changing and becoming smaller due to US Census Bureau methodology.
 
 ### Median Household Income
 
@@ -348,7 +317,7 @@ ggplot(allTracts.group_sf)+
     #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
     scale_fill_gradient(low = "white",high = "darkseagreen4") +
     labs(title = "Median Household Income",
-         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation adjusted to 2017 dollars",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation-adjusted to 2017 dollars",
          fill = "Dollars") +
     facet_wrap(~year)+
     mapTheme() + 
@@ -358,9 +327,7 @@ ggplot(allTracts.group_sf)+
     )
 ```
 
-While figure 2 highlighted little change in population density across the city, this map shows increases in median household income across the city, but especially in non-TOD areas. 
-
-One possible explanation is that even adjusted for inflation, households in Census tracts outside of the TOD area saw wage growth higher than inflation. Alternatively, high income households in those areas may have pushed out lower income households. This period (2009 to 2017) saw major growth in the tech sector and given that San Francisco is a major hub for that industry, this map may reflect that growth.
+While figure 2 highlighted little change in population density across the city, this map shows increases in median household income in areas across the city, but especially in non-TOD areas. This map suggests that higher income households may have chosen to move away from the downtown areas with greater population densities highlighted in figure 1, regardless of their proximity to BART - higher income households may not place as much value being in TOD areas in San Francisco.   
 
 ### Total Population
 
@@ -383,9 +350,11 @@ ggplot(allTracts.group_sf)+
     )
 ```
 
-The population density shown in figure 2 may reflect infill development and where higher density development has occurred, but total population counts can reflect the overall desirability of a neighborhood and potentially the total potential customer base for transit services.
+While population density can reflect infill development or high density development generally, total population count can help quantify the total potential customer base for transit services.
 
-This map shows some changes between years throughout San Francisco, especially in the northeast corner of the city. Downtown areas especially appear to have a higher population in 2017 compared to 2009. However, similar to population density, these changes may be influenced by changes in US Census Bureau methodology.
+This map shows some changes between years throughout San Francisco, especially in the northeast corner of the city. Downtown areas, including TOD areas, appear to have higher population counts in 2017 compared to 2009. Taken together with figure 3, more lower income residents may place more value in close proximity to BART stops.
+
+Note: similar to population density, these population count changes may be influenced by changes in US Census Bureau methodology - some tracts with higher population counts in the 2009 map are subdivided in the 2017 map.
 
 ### Median Rent
 
@@ -398,7 +367,7 @@ ggplot(allTracts.group_sf)+
     #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
     scale_fill_gradient(low = "white",high = "cyan4") +
     labs(title = "Median Rent",
-         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation adjusted to 2017 dollars",
+         subtitle = "BART stops shown as points; TOD tracts selection outlined in red \nNote: 2009 dollars inflation-adjusted to 2017 dollars",
          fill = "Dollars") +
     facet_wrap(~year)+
     mapTheme() + 
@@ -408,7 +377,9 @@ ggplot(allTracts.group_sf)+
     )
 ```
 
-Much like figure 3 and median household income, median rents appear to follow a similar pattern where the most growth in median rent prices occurred in areas outside of the TOD. As the higher income households have moved into neighborhoods outside of the TOD, they have likely increased the rent costs for the area.
+Similar to median household income, median rents appear to follow a similar pattern where the most growth in median rent prices occurred in areas outside of TOD areas. Following figure 3, as higher income households moved into neighborhoods outside of the TOD, they likely increased the rent costs for the area. 
+
+The tech boom of the 2010s is one potential explanation for median rents increasing along with median household income. Taken together with limited change in total population, these maps suggest that wealthier households pushed out lower income households from non-TOD areas, but that pockets of relative affordability may have remained in the denser downtown areas of the city near BART stops. 
 
 ## Plotting indicators
 
@@ -417,16 +388,16 @@ allTracts.Summary_bay <-
   st_drop_geometry(allTracts.group_bay) %>%
   group_by(year, TOD) %>%
   summarize(Population = mean(TotalPop, na.rm = T),
-            Income = mean(MedHHInc, na.rm = T),
-            Rent = mean(MedRent, na.rm = T),
+            Income = mean(MedHHInc.inf, na.rm = T),
+            Rent = mean(MedRent.inf, na.rm = T),
             Density = mean(density, na.rm = T))
 
 allTracts.Summary_sf <- 
   st_drop_geometry(allTracts.group_sf) %>%
   group_by(year, TOD) %>%
   summarize(Population = mean(TotalPop, na.rm = T),
-            Income = mean(MedHHInc, na.rm = T),
-            Rent = mean(MedRent, na.rm = T),
+            Income = mean(MedHHInc.inf, na.rm = T),
+            Rent = mean(MedRent.inf, na.rm = T),
             Density = mean(density, na.rm = T))
 
 ```
@@ -434,6 +405,8 @@ allTracts.Summary_sf <-
 ## TOD Indicators
 
 ### San Francisco
+
+The following tables and graphs provide information on TOD vs. non-TOD areas for both 2009 and 2017. Data for the Bay Area covered by the BART network is provided to help contextualize San Francisco data.
 
 ```{r kable table sf}
 allTracts.Summary_sf %>%
@@ -488,6 +461,10 @@ sf_plot <- allTracts.Summary_sf %>%
 
 grid.arrange(sf_plot, bay_plot)
 ```
+
+San Francisco and the Bay Area appear to have similar experiences with TOD vs. non-TOD areas, with the exception of total population. While the scale for density is doubled in San Francisco, both the city and the Bay Area have higher population densities in TOD areas vs. non-TOD areas for 2009 and 2017. San Francisco and the region also have lower household incomes and median rents in TOD areas vs. non-TOD areas for both years. Relative growth across years appear similar for population density, median household income, and median rent. 
+
+Total population counts are higher in San Francisco TOD areas across both years. In contrast, non-TOD areas have higher total population counts in the Bay Area. However, the Bay Area did experience an increase in population counts for TOD areas between 2009 and 2017.
 
 ## Graduated Symbol Maps
 ### San Francisco
@@ -553,6 +530,7 @@ stops_pop_sf <- ggplot() +
           size = 0.5) +
   scale_size_continuous(range = c(0.1, 4)) +
   scale_fill_distiller(palette = "Spectral") +
+  facet_wrap(~year)+
   common_theme +
   labs(title = "Population Within 0.5 miles of BART",  # Add title
        size = "Population", # Legend title
@@ -579,7 +557,8 @@ stops_rent_sf <- ggplot() +
           shape = 3,
           size = 0.5) +
   scale_size_continuous(range = c(0.1, 4)) +
-  scale_fill_distiller(palette = "Spectral") +  
+  scale_fill_distiller(palette = "Spectral") +
+  facet_wrap(~year)+
   common_theme +
   labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
        size = "Mean Rent",  # Legend title
@@ -594,7 +573,7 @@ grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
 
 ```  
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
+BART stops with more people nearby generally draw from areas with lower average rents. However, this relationship does not hold true for stops just south of downtown. The maps for each indicator show minimal change from 2009 to 2017.
 
 ### Bay Area
 
@@ -658,6 +637,7 @@ stops_pop_bay <- ggplot() +
           size = 0.5) +
   scale_size_continuous(range = c(0.1, 1.5)) +
   scale_fill_distiller(palette = "Spectral") +
+  facet_wrap(~year)+
   common_theme +
   labs(title = "Population Within 0.5 miles of BART",  # Add title
        size = "Population",
@@ -683,7 +663,8 @@ stops_rent_bay <- ggplot() +
           shape = 3,
           size = 0.5) +
   scale_size_continuous(range = c(0.1, 1.5)) +
-  scale_fill_distiller(palette = "Spectral") +  
+  scale_fill_distiller(palette = "Spectral") +
+  facet_wrap(~year)+
   common_theme +
   labs(title = "Mean Rent Within 0.5 Miles of BART",  # Add title
        size = "Mean Rent",
@@ -698,7 +679,7 @@ grid.arrange(stops_pop_bay, stops_rent_bay, ncol = 2)
 
 ```  
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+The relationship between population and average rent described for San Francisco does not consistently appear in the Bay Area. High populations near stops are clustered around San Francisco especially, but BART stops have variability in the nearby average rents across the Bay Area. The maps for each indicator show minimal change from 2009 to 2017.
 
 ## Multiple Ring Buffer Analysis
 
@@ -763,9 +744,9 @@ bay_lines <- ggplot(allTracts.rings.summary_bay,
 grid.arrange(sf_lines, bay_lines)
 ```
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+In San Francisco and throughout the Bay Area, average rents generally increase the farther away an area is from a BART Stop in both 2009 and 2017. However, there is more variability in this relationship for San Francisco. 
 
 # Conclusion
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+San Francisco residents appear to have a nuanced relationship with TOD and access to the BART network. The data suggests that wealthier renter households in the city may value other amenities more than they do proximity to a BART stop - incomes and average rents are higher in non-TOD areas compared to TOD areas. This relationship is also true across the BART network for the Bay Area and not exclusive to San Francisco. However, the TOD areas in San Francisco already have high population densities. It is possible that access to the BART network is valued by renters in those TOD areas because the system can connect them to jobs elsewhere in the region. While San Francisco renters appear unwilling to pay a premium to live near BART stops, the indicators show that given the high density and total population in TOD areas, transit-oriented development is likely already a feature of San Francisco and can benefit lower income residents.
 
