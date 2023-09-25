@@ -315,13 +315,11 @@ ggplot(allTracts.group_sf)+
 
 ### Population Density per Square Mile
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-
 ```{r density map sf}
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = density)) +
-    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 0.5, col = "red",  fill = "NA") +
     geom_sf(data = BART_Stops_sf, col = "black")+
     #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
     scale_fill_gradient(low = "white",high = "red4") +
@@ -335,16 +333,16 @@ ggplot(allTracts.group_sf)+
       caption = "Population density per square mile by year"
     )
 ```
+The nimby city hates density, will prevent it at any cost.
+
 
 ### Median Household Income
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 ```{r medhhinc map sf}
 ggplot(allTracts.group_sf)+
     geom_sf(data = st_union(cropped_allTracts_sf))+
     geom_sf(aes(fill = MedHHInc)) +
-    geom_sf(data = st_union(selectCentroids_sf), lwd = 1, col = "red",  fill = "NA") +
+    geom_sf(data = st_union(selectCentroids_sf), lwd = 0.5, col = "red",  fill = "NA") +
     geom_sf(data = BART_Stops_sf, col = "black")+
     #geom_sf(data = buffer_sf, lwd = 1, col = "darkgoldenrod1",  fill = "NA") +
     scale_fill_gradient(low = "white",high = "darkseagreen4") +
@@ -358,10 +356,10 @@ ggplot(allTracts.group_sf)+
       caption = "Median household income by year"
     )
 ```
+This map shows a noticeable increase in mean household income. Interestingly, the areas within the red border (TOD tracts) appear to have increased less than the surrounding area. Correlation is not causation, though...
+
 
 ### Total Population
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 ```{r total pop map sf}
 ggplot(allTracts.group_sf)+
@@ -381,6 +379,7 @@ ggplot(allTracts.group_sf)+
       caption = "Total population by year"
     )
 ```
+This plot shows a marginal increase in population...
 
 ### Median Rent
 
@@ -404,7 +403,7 @@ ggplot(allTracts.group_sf)+
       caption = "Median rent by year"
     )
 ```
-
+As with the HH income plots, we can see an overall increase in Median rent in SF, with the area inside the TOD zone increasing less.
 ## Plotting indicators
 
 ```{r TOD Indicator Table bay}
@@ -427,8 +426,6 @@ allTracts.Summary_sf <-
 ```
 
 ### Plotting indicators across time and space
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 ```{r TOD indicator Plots bay, fig.height = 15}
 bay_plot <- allTracts.Summary_bay %>%
   gather(Variable, Value, -year, -TOD) %>%
@@ -458,12 +455,9 @@ sf_plot <- allTracts.Summary_sf %>%
 
 grid.arrange(sf_plot, bay_plot)
 ```
-
 ## TOD Indicator Tables
 
 ### San Francisco
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 ```{r kable table sf}
 allTracts.Summary_sf %>%
@@ -489,10 +483,11 @@ allTracts.Summary_bay %>%
   kable_styling()
 ```
 
+The observations we have made spatially in the plots seem to bear out in these comparative bar charts and tables. Here we have expanded the study area to include the greater Bay Area, based on the theory that transit has a regional impact on demographics and the built environment. For four of the indicators, the effects are relatively similar, but for pop they are different.
+
+
 ## Graduated Symbol Maps
 ### San Francisco
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
 
 
 ```{r graduated symbol map sf}
@@ -596,10 +591,10 @@ stops_rent_sf <- ggplot() +
 grid.arrange(stops_pop_sf, stops_rent_sf, ncol = 2)
 
 ```  
+Here we can see the spatial variation of populationa dn median rent in SF for each BART stop. Observation = 
 
 ### Bay Area
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 ```{r graduated symbol map bay}
 Stops_Individual_bay <- st_buffer(BART_Stops_bay, 2640)
@@ -700,6 +695,7 @@ stops_rent_bay <- ggplot() +
 grid.arrange(stops_pop_bay, stops_rent_bay, ncol = 2)
 
 ```  
+Here's the same for the bay area. Observation =
 
 ## Multiple Ring Buffer Analysis
 
@@ -731,8 +727,8 @@ sf_lines <- ggplot(allTracts.rings.summary_sf,
   xlab("Distance (mi)")+
   ylab("Mean Rent ($)")+
   gg_figure_caption(
-      caption = "Mean Rent as a function of distance to BART stop (San Francisco)",
-  )
+      caption = "Mean Rent as a function of distance to BART stop (San Francisco)") +
+  theme(plot.caption = element_text(hjust = 0))
 
 BART_MRB_bay <- multipleRingBuffer(st_union(BART_Stops_bay), 47520, 2640)
 
@@ -757,14 +753,15 @@ bay_lines <- ggplot(allTracts.rings.summary_bay,
   scale_y_continuous(limits = c(0, 2100))+
   xlab("Distance (mi)")+
   ylab("Mean Rent ($)")+
-  gg_figure_caption(
-      caption = "Mean Rent as a function of distance to BART stop (Bay Area)",
-  )
+  gg_figure_caption(caption = "Mean Rent as a function of distance to BART stop (Bay Area)") +
+  theme(plot.caption = element_text(hjust = 0))
 
 
 
 grid.arrange(sf_lines, bay_lines)
 ```
+These charts say that proximity to BART has a slight negative influence on mean rent. In SF it is more variable increase whereas the bay area has a more consistent increase in rent with distance to BART.
+
 
 # Conclusion
 
