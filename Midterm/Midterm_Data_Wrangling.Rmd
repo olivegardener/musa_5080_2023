@@ -1,0 +1,173 @@
+---
+title: "OSM Data Wrangling"
+output: html_document
+date: "2023-09-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r cars}
+# install.packages("osmdata")
+library(osmdata)
+library(sf)
+library(ggplot2)
+library(raster)
+library(dplyr)
+library(tidycensus)
+library(units)
+
+# Capture the start time
+start_time <- Sys.time()
+```
+
+## Setting Parameters
+```{r}
+# Coordinate System
+coordinate_system <- 2272
+
+#Boundary File
+download.file("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.zip", destfile = "philly_boundary.zip")
+unzip("philly_boundary.zip", exdir = "philly_boundary_data")
+philly_boundary <- st_read("philly_boundary_data/City_Limits.shp")
+# philly_boundary <- st_transform(philly_boundary, coordinate_system)
+
+# Create a bounding box from the boundary
+bbox <- st_bbox(philly_boundary)
+
+# Reproject philly boundary
+philly_boundary <- st_transform(philly_boundary, coordinate_system)
+
+```
+
+## Download OSM Data
+```{r Download OSM Data, echo=FALSE}
+# Download Roads Data from OSM
+trunk <- opq(bbox) %>%
+  add_osm_feature(key = "highway", value = "trunk") %>%
+  osmdata_sf()
+trunk <- trunk$osm_lines
+
+trunk_link <- opq(bbox) %>%
+  add_osm_feature(key = "highway", value = "trunk_link") %>%
+  osmdata_sf()
+trunk_link <- trunk_link$osm_lines
+
+motorway <- opq(bbox) %>%
+  add_osm_feature(key = "highway", value = "motorway") %>%
+  osmdata_sf()
+motorway <- motorway$osm_lines
+
+motorway_link <- opq(bbox) %>%
+  add_osm_feature(key = "highway", value = "motorway_link") %>%
+  osmdata_sf()
+motorway_link <- motorway_link$osm_lines
+
+highways <- bind_rows(trunk, trunk_link, motorway, motorway_link)
+highways <- st_transform(highways, coordinate_system)
+highways <- st_intersection(highways, philly_boundary)
+
+ggplot() +
+  geom_sf(data = philly_boundary, fill = "lightblue") +
+  geom_sf(data = highways, color = "red") +
+  theme_minimal()
+
+
+
+# amenities <- opq(bbox) %>%
+#   add_osm_feature(key = "amenity", value = "school") %>%
+#   osmdata_sf()
+# 
+# amenities <- amenities$osm_points
+# amenities <- st_transform(amenities, coordinate_system)
+# 
+# ggplot() +
+#   geom_sf(data = philly_boundary, fill = "lightblue") +
+#   geom_point(data = amenities, color = "red") +
+#   theme_minimal()
+
+```
+
+```{r}
+#2020 ACS data for Philly
+tracts2020 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "DP04_0046PE"), 
+          year=2020, state=42, county="101", 
+          geometry=TRUE, output="wide") %>%
+  st_transform(coordinate_system) %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         HomeOwnRate = DP04_0046PE) %>% 
+  mutate(area = st_area(geometry)) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2020", 
+         density = drop_units((TotalPop / (area / 2.788e+7))))
+```
+
+### Calculate distances to features
+```{r}
+#Calc centroids
+tracts_centroids <- st_centroid(tracts2020)
+
+# Initialize an empty vector to store distances
+nearest_distances <- vector("numeric", length = nrow(tracts2020))
+
+# Loop through each centroid to find the nearest point in FIRST and calculate the distance
+for (i in 1:nrow(tracts_centroids)) {
+  centroid <- tracts_centroids[i, ]
+  nearest_index <- st_nearest_feature(centroid, highways)
+  nearest_point <- highways[nearest_index, ]
+  distance <- st_distance(centroid, nearest_point)
+  
+# Store the distance & convert to miles
+nearest_distances[i] <- as.numeric(distance/5280)}
+
+# Add the distances to the cropped_allTracts_bay dataframe
+tracts2020$Dist2Highway <- nearest_distances
+```
+### Plot Results
+```{r}
+# Define a common theme to remove axis text and ticks
+common_theme <- theme(
+  # panel.background = element_rect(fill = "#383838"),  # Set panel background to dark grey
+  # plot.background = element_rect(fill = "#383838"),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  legend.position = "bottom",
+  legend.box = "vertical")
+
+# Create the first plot
+highway_proximity <- ggplot() +
+  geom_sf(data = tracts2020, 
+          aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
+          color = NA,
+          alpha = 0.75) +
+  geom_sf(data = highways, color = "black") +
+  scale_size_continuous(range = c(0.1, 4)) +
+  scale_fill_distiller(palette = "Spectral") +
+  common_theme +
+  labs(title = "Highway Proximity",  # Add title
+       fill = "Distance to Highway (mi)")   # legend title
+
+highway_proximity
+```
+
+
+```{r timer_end}
+# Capture the end time
+end_time <- Sys.time()
+
+# Calculate and print the runtime
+runtime <- end_time - start_time
+print(paste("Total runtime:", runtime))
+```
+
