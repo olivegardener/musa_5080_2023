@@ -42,7 +42,7 @@ bbox <- st_bbox(philly_boundary)
 philly_boundary <- st_transform(philly_boundary, coordinate_system)
 ```
 
-## Philly Trees
+## Philly Trees (not working yet)
 ```{r}
 # Load Philly Trees
 url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
@@ -53,10 +53,11 @@ trees <- content(response, "parsed")
 trees <- data$features
 trees <- do.call(rbind, lapply(features, function(x) data.frame(matrix(unlist(x), ncol=8, byrow=TRUE))))
 
-
 # Convert dataframe to sf object and crop
 trees <- st_as_sf(df, coords = c("X5", "X6"), crs = coordinate_system)
 trees <- st_intersection(trees, philly_boundary)
+
+trees <-st_read('https://github.com/azavea/opendataphilly-jkan/tree/main/_datasets')
 
 # Plot using ggplot2
 ggplot() +
