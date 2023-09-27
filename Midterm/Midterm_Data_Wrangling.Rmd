@@ -6,6 +6,7 @@ date: "2023-09-24"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
 ```
 
 ## R Markdown
@@ -44,26 +45,51 @@ philly_boundary <- st_transform(philly_boundary, coordinate_system)
 
 ## Philly Trees (not working yet)
 ```{r}
-# Load Philly Trees
-url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
-response <- GET(url)
-trees <- content(response, "parsed")
+# # Load Philly Trees
+# url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
+# response <- GET(url)
+# trees <- content(response, "parsed")
+# 
+# # Extract features and convert to data frame
+# trees <- data$features
+# trees <- do.call(rbind, lapply(features, function(x) data.frame(matrix(unlist(x), ncol=8, byrow=TRUE))))
+# 
+# # Convert dataframe to sf object and crop
+# trees <- st_as_sf(df, coords = c("X5", "X6"), crs = coordinate_system)
+# trees <- st_intersection(trees, philly_boundary)
+# 
+# trees <-st_read('https://github.com/azavea/opendataphilly-jkan/tree/main/_datasets')
+# 
+# # Plot using ggplot2
+# ggplot() +
+#   geom_sf(data = trees) +
+#   theme_minimal() +
+#   labs(title = "PPR Tree Inventory 2022")
+```
 
-# Extract features and convert to data frame
-trees <- data$features
-trees <- do.call(rbind, lapply(features, function(x) data.frame(matrix(unlist(x), ncol=8, byrow=TRUE))))
-
-# Convert dataframe to sf object and crop
-trees <- st_as_sf(df, coords = c("X5", "X6"), crs = coordinate_system)
-trees <- st_intersection(trees, philly_boundary)
-
-trees <-st_read('https://github.com/azavea/opendataphilly-jkan/tree/main/_datasets')
-
-# Plot using ggplot2
-ggplot() +
-  geom_sf(data = trees) +
-  theme_minimal() +
-  labs(title = "PPR Tree Inventory 2022")
+## ACS Data
+```{r}
+#2020 ACS data for Philly
+tracts2020 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "DP04_0046PE",
+                        "B02001_002E"), 
+          year=2020, state=42, county="101", 
+          geometry=TRUE, output="wide") %>%
+  st_transform(coordinate_system) %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         HomeOwnRate = DP04_0046PE,
+         White = B02001_002E) %>% 
+  mutate(area = st_area(geometry)) %>%
+  mutate(year = "2020", 
+         density = drop_units((TotalPop / (area / 2.788e+7))),
+         PctWhite = (White/TotalPop)) %>% 
+  dplyr::select(-NAME, -White, -starts_with("B"))
 ```
 
 
@@ -114,42 +140,81 @@ ggplot() +
 #   theme_minimal()
 
 ```
-## ACS Data
+# ```{r}
+# Buildings <- opq(bbox) %>%
+#   add_osm_feature(key = "building") %>%
+#   osmdata_sf()
+# Buildings <- Buildings$osm_polygons
+# ```
+# 
+# 
+# ### Calculate distances to features
+# ```{r}
+# #Calc centroids
+# tracts_centroids <- st_centroid(tracts2020)
+# 
+# # Initialize an empty vector to store distances
+# nearest_distances <- vector("numeric", length = nrow(tracts2020))
+# 
+# # Loop through each centroid to find the nearest point in FIRST and calculate the distance
+# for (i in 1:nrow(tracts_centroids)) {
+#   centroid <- tracts_centroids[i, ]
+#   nearest_index <- st_nearest_feature(centroid, highways)
+#   nearest_point <- highways[nearest_index, ]
+#   distance <- st_distance(centroid, nearest_point)
+#   
+# # Store the distance & convert to miles
+# nearest_distances[i] <- as.numeric(distance/5280)}
+# 
+# # Add the distances to the cropped_allTracts_bay dataframe
+# tracts2020$Dist2Highway <- nearest_distances
+# ```
+# 
+# ### Plot Results
+# ```{r}
+# # Define a common theme to remove axis text and ticks
+# common_theme <- theme(
+#   # panel.background = element_rect(fill = "#383838"),  # Set panel background to dark grey
+#   # plot.background = element_rect(fill = "#383838"),
+#   axis.text = element_blank(),
+#   axis.ticks = element_blank(),
+#   axis.title = element_blank(),
+#   legend.position = "bottom",
+#   legend.box = "vertical")
+# 
+# # Create the first plot
+# highway_proximity <- ggplot() +
+#   geom_sf(data = tracts2020, 
+#           aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
+#           color = NA,
+#           alpha = 0.75) +
+#   geom_sf(data = highways, color = "black") +
+#   scale_size_continuous(range = c(0.1, 4)) +
+#   scale_fill_distiller(palette = "Spectral") +
+#   common_theme +
+#   labs(title = "Highway Proximity",  # Add title
+#        fill = "Distance to Highway (mi)")   # legend title
+# 
+# highway_proximity
+# ```
+
+
 ```{r}
-#2020 ACS data for Philly
-tracts2020 <- 
-  get_acs(geography = "tract", 
-          variables = c("B25026_001E",
-                        "B19013_001E",
-                        "B25058_001E",
-                        "DP04_0046PE",
-                        "B02001_002E"), 
-          year=2020, state=42, county="101", 
-          geometry=TRUE, output="wide") %>%
-  st_transform(coordinate_system) %>%
-  rename(TotalPop = B25026_001E, 
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         HomeOwnRate = DP04_0046PE,
-         White = B02001_002E) %>% 
-  mutate(area = st_area(geometry)) %>%
-  mutate(year = "2020", 
-         density = drop_units((TotalPop / (area / 2.788e+7))),
-         PctWhite = (White/TotalPop)) %>% 
-  dplyr::select(-NAME, -White, -starts_with("B"))
+Buildings <- opq(bbox) %>%
+  add_osm_feature(key = "building") %>%
+  osmdata_sf()
+Buildings_Poly <- Buildings$osm_polygons
+Building_Pts <- Buildings$osm_points
 ```
 
 ### Calculate distances to features
-```{r}
-#Calc centroids
-tracts_centroids <- st_centroid(tracts2020)
-
+```{r }
 # Initialize an empty vector to store distances
-nearest_distances <- vector("numeric", length = nrow(tracts2020))
+nearest_distances <- vector("numeric", length = nrow(Building_Pts))
 
 # Loop through each centroid to find the nearest point in FIRST and calculate the distance
-for (i in 1:nrow(tracts_centroids)) {
-  centroid <- tracts_centroids[i, ]
+for (i in 1:nrow(Building_Pts)) {
+  centroid <- Building_Pts[i, ]
   nearest_index <- st_nearest_feature(centroid, highways)
   nearest_point <- highways[nearest_index, ]
   distance <- st_distance(centroid, nearest_point)
@@ -158,8 +223,9 @@ for (i in 1:nrow(tracts_centroids)) {
 nearest_distances[i] <- as.numeric(distance/5280)}
 
 # Add the distances to the cropped_allTracts_bay dataframe
-tracts2020$Dist2Highway <- nearest_distances
+Buildings_Poly$Dist2Highway <- nearest_distances
 ```
+
 ### Plot Results
 ```{r}
 # Define a common theme to remove axis text and ticks
@@ -173,11 +239,11 @@ common_theme <- theme(
   legend.box = "vertical")
 
 # Create the first plot
-highway_proximity <- ggplot() +
-  geom_sf(data = tracts2020, 
-          aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
-          color = NA,
-          alpha = 0.75) +
+Buildings_Poly <- ggplot() +
+  geom_sf(data = Dist2Highway)+
+          # aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
+          # color = NA,
+          # alpha = 0.75) +
   geom_sf(data = highways, color = "black") +
   scale_size_continuous(range = c(0.1, 4)) +
   scale_fill_distiller(palette = "Spectral") +
@@ -185,9 +251,8 @@ highway_proximity <- ggplot() +
   labs(title = "Highway Proximity",  # Add title
        fill = "Distance to Highway (mi)")   # legend title
 
-highway_proximity
+Buildings_Poly
 ```
-
 
 ```{r timer_end}
 # Capture the end time
