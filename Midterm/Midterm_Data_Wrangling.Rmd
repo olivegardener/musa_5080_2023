@@ -19,6 +19,7 @@ library(raster)
 library(dplyr)
 library(tidycensus)
 library(units)
+library(httr)
 
 # Capture the start time
 start_time <- Sys.time()
@@ -29,21 +30,43 @@ start_time <- Sys.time()
 # Coordinate System
 coordinate_system <- 2272
 
-#Boundary File
+#Load Boundary File
 download.file("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.zip", destfile = "philly_boundary.zip")
 unzip("philly_boundary.zip", exdir = "philly_boundary_data")
 philly_boundary <- st_read("philly_boundary_data/City_Limits.shp")
-# philly_boundary <- st_transform(philly_boundary, coordinate_system)
 
 # Create a bounding box from the boundary
 bbox <- st_bbox(philly_boundary)
 
 # Reproject philly boundary
 philly_boundary <- st_transform(philly_boundary, coordinate_system)
-
 ```
 
-## Download OSM Data
+## Philly Trees
+```{r}
+# Load Philly Trees
+url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
+response <- GET(url)
+trees <- content(response, "parsed")
+
+# Extract features and convert to data frame
+trees <- data$features
+trees <- do.call(rbind, lapply(features, function(x) data.frame(matrix(unlist(x), ncol=8, byrow=TRUE))))
+
+
+# Convert dataframe to sf object and crop
+trees <- st_as_sf(df, coords = c("X5", "X6"), crs = coordinate_system)
+trees <- st_intersection(trees, philly_boundary)
+
+# Plot using ggplot2
+ggplot() +
+  geom_sf(data = trees) +
+  theme_minimal() +
+  labs(title = "PPR Tree Inventory 2022")
+```
+
+
+## OSM Data
 ```{r Download OSM Data, echo=FALSE}
 # Download Roads Data from OSM
 trunk <- opq(bbox) %>%
@@ -90,7 +113,7 @@ ggplot() +
 #   theme_minimal()
 
 ```
-
+## ACS Data
 ```{r}
 #2020 ACS data for Philly
 tracts2020 <- 
