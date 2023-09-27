@@ -98,18 +98,21 @@ tracts2020 <-
           variables = c("B25026_001E",
                         "B19013_001E",
                         "B25058_001E",
-                        "DP04_0046PE"), 
+                        "DP04_0046PE",
+                        "B02001_002E"), 
           year=2020, state=42, county="101", 
           geometry=TRUE, output="wide") %>%
   st_transform(coordinate_system) %>%
   rename(TotalPop = B25026_001E, 
          MedHHInc = B19013_001E, 
          MedRent = B25058_001E,
-         HomeOwnRate = DP04_0046PE) %>% 
+         HomeOwnRate = DP04_0046PE,
+         White = B02001_002E) %>% 
   mutate(area = st_area(geometry)) %>%
-  dplyr::select(-NAME, -starts_with("B")) %>%
   mutate(year = "2020", 
-         density = drop_units((TotalPop / (area / 2.788e+7))))
+         density = drop_units((TotalPop / (area / 2.788e+7))),
+         PctWhite = (White/TotalPop)) %>% 
+  dplyr::select(-NAME, -White, -starts_with("B"))
 ```
 
 ### Calculate distances to features

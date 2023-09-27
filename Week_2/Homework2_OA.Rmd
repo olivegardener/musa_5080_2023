@@ -596,7 +596,7 @@ for (i in 1:nrow(tracts_centroids)) {
   nearest_distances[i] <- as.numeric(distance/5280)
 }
 
-# Add the distances to the DATABIZNESS dataframe
+# Add the distances to the cropped_allTracts_bay dataframe
 cropped_allTracts_bay$Distance_to_BART <- nearest_distances
 ```
 
