@@ -21,6 +21,8 @@ library(dplyr)
 library(tidycensus)
 library(units)
 library(httr)
+library(arcpullr)
+library(tigris)
 
 # Capture the start time
 start_time <- Sys.time()
@@ -43,9 +45,19 @@ bbox <- st_bbox(philly_boundary)
 philly_boundary <- st_transform(philly_boundary, coordinate_system)
 ```
 
+
+```{r philly}
+
+phl <- counties(state = 42) %>% 
+  filter(NAME == "Philadelphia") %>%
+  st_transform(counties, crs = 2272)
+
+```
+
+
 ## Philly Trees (not working yet)
 ```{r}
-# # Load Philly Trees
+# Load Philly Trees
 # url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
 # response <- GET(url)
 # trees <- content(response, "parsed")
@@ -66,6 +78,55 @@ philly_boundary <- st_transform(philly_boundary, coordinate_system)
 #   theme_minimal() +
 #   labs(title = "PPR Tree Inventory 2022")
 ```
+
+```{r PhillyOpenData, fig.width=15}
+
+#Uses arcpullr to access ESRI API - https://cran.r-project.org/web/packages/arcpullr/arcpullr.pdf
+
+trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>% 
+  st_transform(crs = 2272)
+
+bikes <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Bike_Network/FeatureServer/0/") %>% 
+  st_transform(crs = 2272)
+
+community_landcare <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_CommunityLandcare/FeatureServer/0/") %>% 
+  st_transform(crs = 2272)
+
+landcare_maintenance <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_PhilaLandCare_Maintenance/FeatureServer/0/")%>% 
+  st_transform(crs = 2272)
+
+landuse <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Land_Use/FeatureServer/0/")%>% 
+  st_transform(crs = 2272)
+
+parks <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Properties/FeatureServer/0/")%>% 
+  st_transform(crs = 2272)
+
+uni <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Universities_Colleges/FeatureServer/0/")%>% 
+  st_transform(crs = 2272)
+
+neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zfb/ArcGIS/rest/services/Philadelphia_Neighborhoods/FeatureServer/0")%>%
+  st_transform(crs = 2272)
+
+#struggling to load on my comp
+tree_canopy_change_08to18 <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/TreeCanopyChange_2008_2018/FeatureServer/0/")%>%
+  st_transform(crs = 2272)
+
+ggplot() +
+  geom_sf(data = phl) + 
+  geom_sf(data = neighborhoods)
+
+
+```
+
+```{r dvprc}
+
+septa <- get_spatial_layer("https://arcgis.dvrpc.org/portal/rest/services/Transportation/SEPTA_TransitStops/FeatureServer/0")%>% 
+  st_transform(crs = 2272)
+
+prop <- get_spatial_layer("https://phl.carto.com/api/v2/sql?q=SELECT * FROM opa_properties_public")
+
+```
+
 
 ## ACS Data
 ```{r}
