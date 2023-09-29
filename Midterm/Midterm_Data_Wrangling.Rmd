@@ -23,6 +23,7 @@ library(units)
 library(httr)
 library(arcpullr)
 library(tigris)
+library(rgdal)
 
 # Capture the start time
 start_time <- Sys.time()
@@ -34,102 +35,77 @@ start_time <- Sys.time()
 coordinate_system <- 2272
 
 #Load Boundary File
-download.file("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.zip", destfile = "philly_boundary.zip")
-unzip("philly_boundary.zip", exdir = "philly_boundary_data")
-philly_boundary <- st_read("philly_boundary_data/City_Limits.shp")
-
+philly_boundary <- counties(state = 42) %>% 
+  filter(NAME == "Philadelphia")
 # Create a bounding box from the boundary
 bbox <- st_bbox(philly_boundary)
 
-# Reproject philly boundary
-philly_boundary <- st_transform(philly_boundary, coordinate_system)
-```
-
-
-```{r philly}
-
-phl <- counties(state = 42) %>% 
-  filter(NAME == "Philadelphia") %>%
-  st_transform(counties, crs = 2272)
+philly_boundary <- st_transform(philly_boundary, crs = coordinate_system)
 
 ```
 
 
-## Philly Trees (not working yet)
-```{r}
-# Load Philly Trees
-# url <- "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/query?f=json&where=1=1&outFields=*"
-# response <- GET(url)
-# trees <- content(response, "parsed")
-# 
-# # Extract features and convert to data frame
-# trees <- data$features
-# trees <- do.call(rbind, lapply(features, function(x) data.frame(matrix(unlist(x), ncol=8, byrow=TRUE))))
-# 
-# # Convert dataframe to sf object and crop
-# trees <- st_as_sf(df, coords = c("X5", "X6"), crs = coordinate_system)
-# trees <- st_intersection(trees, philly_boundary)
-# 
-# trees <-st_read('https://github.com/azavea/opendataphilly-jkan/tree/main/_datasets')
-# 
-# # Plot using ggplot2
-# ggplot() +
-#   geom_sf(data = trees) +
-#   theme_minimal() +
-#   labs(title = "PPR Tree Inventory 2022")
+```{r Geodatabase wrangling}
+gdb_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Midterm/data/Features4PPA.gdb"
+layers <- ogrListLayers(gdb_path)
+print(layers)
+
+Vacant_Lots <- sf::st_read(gdb_path, layer = "VacantLots")
+Recycling_Diversion_Rate <- sf::st_read(gdb_path, layer = "Project_OutDataset_PhillyStreets_Recycling_Diversion_Rate")
+Hospitals <- sf::st_read(gdb_path, layer = "Project_OutDataset_PhillyHealth_Hospitals")
+Regional_Rail_Stations <- sf::st_read(gdb_path, layer = "Project_OutDataset_SEPTA___Regional_Rail_Stations")
+TreeCanopy <- sf::st_read(gdb_path, layer = "Project_OutDataset_TreeCanopy2018_Dissolved")
+Existing_Trails <- sf::st_read(gdb_path, layer = "Project_OutDataset_PhillyPlanning_Existing_Trails")
+Trolley_Stops <- sf::st_read(gdb_path, layer = "Project_OutDataset_SEPTA___Trolley_Stops")
+PhillyHealth_Collisions <- sf::st_read(gdb_path, layer = "Project_OutDataset_PhillyHealth_Collisions_crash_2011_2014PUBV")
+
 ```
+
 
 ```{r PhillyOpenData, fig.width=15}
-
 #Uses arcpullr to access ESRI API - https://cran.r-project.org/web/packages/arcpullr/arcpullr.pdf
 
-trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>% 
+trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
   st_transform(crs = 2272)
-
-bikes <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Bike_Network/FeatureServer/0/") %>% 
+bike_network <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Bike_Network/FeatureServer/0/") %>% 
   st_transform(crs = 2272)
-
-community_landcare <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_CommunityLandcare/FeatureServer/0/") %>% 
-  st_transform(crs = 2272)
-
-landcare_maintenance <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_PhilaLandCare_Maintenance/FeatureServer/0/")%>% 
-  st_transform(crs = 2272)
-
 landuse <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Land_Use/FeatureServer/0/")%>% 
   st_transform(crs = 2272)
-
 parks <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Properties/FeatureServer/0/")%>% 
   st_transform(crs = 2272)
-
 uni <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Universities_Colleges/FeatureServer/0/")%>% 
   st_transform(crs = 2272)
-
 neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zfb/ArcGIS/rest/services/Philadelphia_Neighborhoods/FeatureServer/0")%>%
   st_transform(crs = 2272)
-
-#struggling to load on my comp
-tree_canopy_change_08to18 <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/TreeCanopyChange_2008_2018/FeatureServer/0/")%>%
-  st_transform(crs = 2272)
-
-ggplot() +
-  geom_sf(data = phl) + 
-  geom_sf(data = neighborhoods)
-
-
-```
-
-```{r dvprc}
-
 septa <- get_spatial_layer("https://arcgis.dvrpc.org/portal/rest/services/Transportation/SEPTA_TransitStops/FeatureServer/0")%>% 
   st_transform(crs = 2272)
+community_landcare <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_CommunityLandcare/FeatureServer/0/") %>% 
+  st_transform(crs = 2272)
+landcare_maintenance <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_PhilaLandCare_Maintenance/FeatureServer/0/") %>%
+  st_transform(crs = 2272)
 
-prop <- get_spatial_layer("https://phl.carto.com/api/v2/sql?q=SELECT * FROM opa_properties_public")
+community_landcare <- st_centroid(community_landcare)
+community_landcare <- st_geometry(community_landcare)
+community_landcare <- st_sf(geometry = community_landcare)
+
+landcare_maintenance <- st_centroid(landcare_maintenance)
+landcare_maintenance <- st_geometry(landcare_maintenance)
+landcare_maintenance <- st_sf(geometry = landcare_maintenance)
+
+landcare_lots <- rbind(community_landcare, landcare_maintenance)
 
 ```
 
 
 ## ACS Data
 ```{r}
+
+# For example, to get variables for the 2019 5-year ACS:
+acs_vars <- load_variables(2020, "acs5", cache = TRUE)
+
+# View the first few rows of the variables
+print(acs_vars)
+
 #2020 ACS data for Philly
 tracts2020 <- 
   get_acs(geography = "tract", 
@@ -137,7 +113,10 @@ tracts2020 <-
                         "B19013_001E",
                         "B25058_001E",
                         "DP04_0046PE",
-                        "B02001_002E"), 
+                        "B02001_002E",
+                        "B08137_004E",
+                        "B25035_001E",
+                        "B15003_022E"), 
           year=2020, state=42, county="101", 
           geometry=TRUE, output="wide") %>%
   st_transform(coordinate_system) %>%
@@ -145,14 +124,19 @@ tracts2020 <-
          MedHHInc = B19013_001E, 
          MedRent = B25058_001E,
          HomeOwnRate = DP04_0046PE,
-         White = B02001_002E) %>% 
+         White = B02001_002E,
+         Car2Work = B08137_004E,
+         YrBuilt = B25035_001E,
+         NumBach = B15003_022E) %>% 
   mutate(area = st_area(geometry)) %>%
   mutate(year = "2020", 
-         density = drop_units((TotalPop / (area / 2.788e+7))),
-         PctWhite = (White/TotalPop)) %>% 
-  dplyr::select(-NAME, -White, -starts_with("B"))
+         PopDensity = drop_units((TotalPop / (area / 2.788e+7))),
+         PctWhite = (White/TotalPop),
+         PctBach = ifelse(TotalPop > 0, ((NumBach) / TotalPop), 0),
+         HouseAge = (2020 - YrBuilt),
+         Car2WorkPct = (Car2Work/TotalPop)) %>%
+  dplyr::select(-NAME, -White, -NumBach, -YrBuilt, -Car2Work, -starts_with("B"))
 ```
-
 
 ## OSM Data
 ```{r Download OSM Data, echo=FALSE}
@@ -181,45 +165,54 @@ highways <- bind_rows(trunk, trunk_link, motorway, motorway_link)
 highways <- st_transform(highways, coordinate_system)
 highways <- st_intersection(highways, philly_boundary)
 
-ggplot() +
-  geom_sf(data = philly_boundary, fill = "lightblue") +
-  geom_sf(data = highways, color = "red") +
-  theme_minimal()
+```
 
+```{r}
+st_write(Vacant_Lots, "data/Vacant_Lots.geojson", delete_dsn = TRUE)
+st_write(Recycling_Diversion_Rate, "data/Recycling_Diversion_Rate.geojson", delete_dsn = TRUE)
+st_write(Hospitals, "data/Hospitals.geojson", delete_dsn = TRUE)
+st_write(Regional_Rail_Stations, "data/Regional_Rail_Stations.geojson", delete_dsn = TRUE)
+st_write(TreeCanopy, "data/TreeCanopy.geojson", delete_dsn = TRUE)
+st_write(Existing_Trails, "data/Existing_Trails.geojson", delete_dsn = TRUE)
+st_write(Trolley_Stops, "data/Trolley_Stops.geojson", delete_dsn = TRUE)
+st_write(PhillyHealth_Collisions, "data/PhillyHealth_Collisions.geojson", delete_dsn = TRUE)
 
+st_write(trees, "data/trees.geojson", delete_dsn = TRUE)
+st_write(bike_network, "data/bike_network.geojson", delete_dsn = TRUE)
+st_write(landuse, "data/landuse.geojson", delete_dsn = TRUE)
+st_write(parks, "data/parks.geojson", delete_dsn = TRUE)
+st_write(uni, "data/uni.geojson", delete_dsn = TRUE)
+st_write(neighborhoods, "data/neighborhoods.geojson", delete_dsn = TRUE)
+st_write(septa, "data/septa.geojson", delete_dsn = TRUE)
+st_write(landcare_lots, "data/landcare_lots.geojson", delete_dsn = TRUE)
 
-# amenities <- opq(bbox) %>%
-#   add_osm_feature(key = "amenity", value = "school") %>%
-#   osmdata_sf()
-# 
-# amenities <- amenities$osm_points
-# amenities <- st_transform(amenities, coordinate_system)
-# 
-# ggplot() +
-#   geom_sf(data = philly_boundary, fill = "lightblue") +
-#   geom_point(data = amenities, color = "red") +
-#   theme_minimal()
+st_write(TotalPop, "data/TotalPop.geojson", delete_dsn = TRUE)
+st_write(MedHHInc, "data/MedHHInc.geojson", delete_dsn = TRUE)
+st_write(MedRent, "data/MedRent.geojson", delete_dsn = TRUE)
+st_write(HomeOwnRate, "data/HomeOwnRate.geojson", delete_dsn = TRUE)
+st_write(PctWhite, "data/PctWhite.geojson", delete_dsn = TRUE)
+st_write(PopDensity, "data/PopDensity.geojson", delete_dsn = TRUE)
+st_write(PctBach, "data/PctBach.geojson", delete_dsn = TRUE)
+st_write(Car2WorkPct, "data/Car2WorkPct.geojson", delete_dsn = TRUE)
+st_write(HouseAge, "data/HouseAge.geojson", delete_dsn = TRUE)
+st_write(highways, "data/highways.geojson", delete_dsn = TRUE)
 
 ```
-# ```{r}
-# Buildings <- opq(bbox) %>%
-#   add_osm_feature(key = "building") %>%
-#   osmdata_sf()
-# Buildings <- Buildings$osm_polygons
-# ```
-# 
-# 
-# ### Calculate distances to features
-# ```{r}
-# #Calc centroids
-# tracts_centroids <- st_centroid(tracts2020)
-# 
+## Read the data back in (copy-paste this to the new document)
+```{r}
+Hospitals <- st_read("data/Hospitals.geojson")
+
+```
+
+### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+### Calculate distances to features (non-KNN method, change vars as needed)
+```{r }
 # # Initialize an empty vector to store distances
-# nearest_distances <- vector("numeric", length = nrow(tracts2020))
+# nearest_distances <- vector("numeric", length = nrow(Building_Pts))
 # 
 # # Loop through each centroid to find the nearest point in FIRST and calculate the distance
-# for (i in 1:nrow(tracts_centroids)) {
-#   centroid <- tracts_centroids[i, ]
+# for (i in 1:nrow(Building_Pts)) {
+#   centroid <- Building_Pts[i, ]
 #   nearest_index <- st_nearest_feature(centroid, highways)
 #   nearest_point <- highways[nearest_index, ]
 #   distance <- st_distance(centroid, nearest_point)
@@ -228,92 +221,24 @@ ggplot() +
 # nearest_distances[i] <- as.numeric(distance/5280)}
 # 
 # # Add the distances to the cropped_allTracts_bay dataframe
-# tracts2020$Dist2Highway <- nearest_distances
-# ```
-# 
-# ### Plot Results
-# ```{r}
-# # Define a common theme to remove axis text and ticks
-# common_theme <- theme(
-#   # panel.background = element_rect(fill = "#383838"),  # Set panel background to dark grey
-#   # plot.background = element_rect(fill = "#383838"),
-#   axis.text = element_blank(),
-#   axis.ticks = element_blank(),
-#   axis.title = element_blank(),
-#   legend.position = "bottom",
-#   legend.box = "vertical")
-# 
-# # Create the first plot
-# highway_proximity <- ggplot() +
-#   geom_sf(data = tracts2020, 
-#           aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
-#           color = NA,
-#           alpha = 0.75) +
-#   geom_sf(data = highways, color = "black") +
-#   scale_size_continuous(range = c(0.1, 4)) +
-#   scale_fill_distiller(palette = "Spectral") +
-#   common_theme +
-#   labs(title = "Highway Proximity",  # Add title
-#        fill = "Distance to Highway (mi)")   # legend title
-# 
-# highway_proximity
-# ```
-
-
-```{r}
-Buildings <- opq(bbox) %>%
-  add_osm_feature(key = "building") %>%
-  osmdata_sf()
-Buildings_Poly <- Buildings$osm_polygons
-Building_Pts <- Buildings$osm_points
+# Buildings_Poly$Dist2Highway <- nearest_distances
 ```
 
-### Calculate distances to features
-```{r }
-# Initialize an empty vector to store distances
-nearest_distances <- vector("numeric", length = nrow(Building_Pts))
 
-# Loop through each centroid to find the nearest point in FIRST and calculate the distance
-for (i in 1:nrow(Building_Pts)) {
-  centroid <- Building_Pts[i, ]
-  nearest_index <- st_nearest_feature(centroid, highways)
-  nearest_point <- highways[nearest_index, ]
-  distance <- st_distance(centroid, nearest_point)
-  
-# Store the distance & convert to miles
-nearest_distances[i] <- as.numeric(distance/5280)}
-
-# Add the distances to the cropped_allTracts_bay dataframe
-Buildings_Poly$Dist2Highway <- nearest_distances
+```{r correlation matrix, fig.width=7, fig.height=5, fig.width=8}
+# #make matrix of variables we're testing
+# mod_vars <- Dat_A %>% 
+#   dplyr::select(CHNG_URB, DIST_INTER, DIST_REGRA, DIST_RAILS, SLOPE, DIST_PARKS, REGRAIL300, INTERST800, MEDHSEVAL_, MEDINC90, PCT_POV_90)
+# 
+# #compute correlation matrix
+# cormatrix <- cor(mod_vars) %>% 
+#   round(., 2)
+# 
+# #plot a correlogram
+# corrplot(cormatrix, method = "circle", type = "lower", order = "hclust", 
+#          tl.col = "black", tl.srt = 45)
 ```
 
-### Plot Results
-```{r}
-# Define a common theme to remove axis text and ticks
-common_theme <- theme(
-  # panel.background = element_rect(fill = "#383838"),  # Set panel background to dark grey
-  # plot.background = element_rect(fill = "#383838"),
-  axis.text = element_blank(),
-  axis.ticks = element_blank(),
-  axis.title = element_blank(),
-  legend.position = "bottom",
-  legend.box = "vertical")
-
-# Create the first plot
-Buildings_Poly <- ggplot() +
-  geom_sf(data = Dist2Highway)+
-          # aes(fill = Dist2Highway),  # Fill color based on Dist2Bart
-          # color = NA,
-          # alpha = 0.75) +
-  geom_sf(data = highways, color = "black") +
-  scale_size_continuous(range = c(0.1, 4)) +
-  scale_fill_distiller(palette = "Spectral") +
-  common_theme +
-  labs(title = "Highway Proximity",  # Add title
-       fill = "Distance to Highway (mi)")   # legend title
-
-Buildings_Poly
-```
 
 ```{r timer_end}
 # Capture the end time
