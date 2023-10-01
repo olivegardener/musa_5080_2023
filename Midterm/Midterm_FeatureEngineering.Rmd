@@ -15,22 +15,31 @@ library(units)
 library(httr)
 library(rgdal)
 
+# library(boxr)
+# # Authenticate with Box
+# box_auth()
 ```
 
 ## Read the data back in (copy-paste this to the new document)
 ```{r}
+Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
+TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+
+# !!!File corrupted
+landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/landuse.geojson")
+
+
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
 Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
 Hospitals <- st_read("data/Hospitals.geojson")
 Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
-TreeCanopy <- st_read("data/TreeCanopy.geojson")
+
 Existing_Trails <- st_read("data/Existing_Trails.geojson")
 Trolley_Stops <- st_read("data/Trolley_Stops.geojson")
 PhillyHealth_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
 
 trees <- st_read("data/trees.geojson")
 bike_network <- st_read("data/bike_network.geojson")
-# landuse <- st_read("data/landuse.geojson")
 parks <- st_read("data/parks.geojson")
 uni <- st_read("data/uni.geojson")
 neighborhoods <- st_read("data/neighborhoods.geojson")
@@ -46,13 +55,38 @@ Houses <- st_read("data/studentData.geojson")
 Compute min dist to trails and bike network
 ```{r}
 # Compute distances
-distances <- st_distance(points, lines)
+distances <- st_distance(Houses, bike_network)
 
 # Compute the minimum distance for each point to the nearest line
 min_distances <- apply(distances, 1, min)
 
 # Join the minimum distances to the attribute table of the points
-points$min_distance <- min_distances
+Houses$min_distance <- min_distances
+
+```
+
+Compute percent canopy cover within 500ft
+```{r}
+# Sample Houses for testing
+n_sample <- nrow(Houses) * 0.01
+Houses_sample <- st_sample(Houses, size = n_sample)
+
+# Create buffers around each house
+HouseBuffers <- st_buffer(Houses_sample, dist = 100)
+
+# Initialize an empty vector to store the canopy coverage percent for each house
+CanopyPct100ft <- vector("numeric", length = nrow(Houses_sample))
+
+# Loop through each house buffer
+for (i in 1:nrow(HouseBuffers)) {
+# Calculate the intersection area between the current house buffer and the tree canopy
+intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], tree_canopy)))
+  
+# Calculate the canopy coverage percent for the current house buffer
+CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
+
+# Add the canopy coverage percent values to the Houses data frame
+Houses$CanopyPct100ft <- CanopyPct100ft
 
 ```
 
@@ -61,7 +95,7 @@ points$min_distance <- min_distances
 
 #make matrix of variables we're testing
 mod_vars <- Dat_A %>% 
-  dplyr::select(CHNG_URB, DIST_INTER, DIST_REGRA, DIST_RAILS, SLOPE, DIST_PARKS, REGRAIL300, INTERST800, MEDHSEVAL_, MEDINC90, PCT_POV_90)
+  dplyr::select(var1, var2, var3)
 
 #compute correlation matrix
 cormatrix <- cor(mod_vars) %>% 
