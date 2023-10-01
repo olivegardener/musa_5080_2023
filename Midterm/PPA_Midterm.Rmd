@@ -1,0 +1,83 @@
+---
+title: "PPA_Midterm"
+author: "Oliver Atwood + Dave Drennan"
+date: "2023-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(sf)
+library(ggplot2)
+library(units)
+library(httr)
+library(rgdal)
+
+```
+
+## Read the data back in (copy-paste this to the new document)
+```{r}
+Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
+Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
+Hospitals <- st_read("data/Hospitals.geojson")
+Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
+TreeCanopy <- st_read("data/TreeCanopy.geojson")
+Existing_Trails <- st_read("data/Existing_Trails.geojson")
+Trolley_Stops <- st_read("data/Trolley_Stops.geojson")
+PhillyHealth_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
+
+trees <- st_read("data/trees.geojson")
+bike_network <- st_read("data/bike_network.geojson")
+# landuse <- st_read("data/landuse.geojson")
+parks <- st_read("data/parks.geojson")
+uni <- st_read("data/uni.geojson")
+neighborhoods <- st_read("data/neighborhoods.geojson")
+septa <- st_read("data/septa.geojson")
+landcare_lots <- st_read("data/landcare_lots.geojson")
+
+tracts2020 <- st_read("data/tracts2020.geojson")
+
+Houses <- st_read("data/studentData.geojson")
+
+```
+
+Compute min dist to trails and bike network
+```{r}
+# Compute distances
+distances <- st_distance(points, lines)
+
+# Compute the minimum distance for each point to the nearest line
+min_distances <- apply(distances, 1, min)
+
+# Join the minimum distances to the attribute table of the points
+points$min_distance <- min_distances
+
+```
+
+
+```{r correlation matrix, fig.width=7, fig.height=5, fig.width=8}
+
+#make matrix of variables we're testing
+mod_vars <- Dat_A %>% 
+  dplyr::select(CHNG_URB, DIST_INTER, DIST_REGRA, DIST_RAILS, SLOPE, DIST_PARKS, REGRAIL300, INTERST800, MEDHSEVAL_, MEDINC90, PCT_POV_90)
+
+#compute correlation matrix
+cormatrix <- cor(mod_vars) %>% 
+  round(., 2)
+
+#plot a correlogram
+corrplot(cormatrix, method = "circle", type = "lower", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

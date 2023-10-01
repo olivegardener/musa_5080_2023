@@ -186,23 +186,9 @@ st_write(neighborhoods, "data/neighborhoods.geojson", delete_dsn = TRUE)
 st_write(septa, "data/septa.geojson", delete_dsn = TRUE)
 st_write(landcare_lots, "data/landcare_lots.geojson", delete_dsn = TRUE)
 
-st_write(TotalPop, "data/TotalPop.geojson", delete_dsn = TRUE)
-st_write(MedHHInc, "data/MedHHInc.geojson", delete_dsn = TRUE)
-st_write(MedRent, "data/MedRent.geojson", delete_dsn = TRUE)
-st_write(HomeOwnRate, "data/HomeOwnRate.geojson", delete_dsn = TRUE)
-st_write(PctWhite, "data/PctWhite.geojson", delete_dsn = TRUE)
-st_write(PopDensity, "data/PopDensity.geojson", delete_dsn = TRUE)
-st_write(PctBach, "data/PctBach.geojson", delete_dsn = TRUE)
-st_write(Car2WorkPct, "data/Car2WorkPct.geojson", delete_dsn = TRUE)
-st_write(HouseAge, "data/HouseAge.geojson", delete_dsn = TRUE)
-st_write(highways, "data/highways.geojson", delete_dsn = TRUE)
-
+st_write(tracts2020, "data/tracts2020.geojson", delete_dsn = TRUE)
 ```
-## Read the data back in (copy-paste this to the new document)
-```{r}
-Hospitals <- st_read("data/Hospitals.geojson")
 
-```
 
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ### Calculate distances to features (non-KNN method, change vars as needed)
