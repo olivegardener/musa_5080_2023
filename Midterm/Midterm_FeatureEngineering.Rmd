@@ -6,6 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+rm(list=ls())
+
 knitr::opts_chunk$set(echo = TRUE)
 
 library(dplyr)
@@ -15,9 +17,8 @@ library(units)
 library(httr)
 library(rgdal)
 
-# library(boxr)
-# # Authenticate with Box
-# box_auth()
+# Coordinate System
+coordinate_system <- 2272
 ```
 
 ## Read the data back in (copy-paste this to the new document)
@@ -25,7 +26,7 @@ library(rgdal)
 Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
 
-# !!!File corrupted
+# !!!File corrupted?
 landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/landuse.geojson")
 
 
@@ -48,7 +49,8 @@ landcare_lots <- st_read("data/landcare_lots.geojson")
 
 tracts2020 <- st_read("data/tracts2020.geojson")
 
-Houses <- st_read("data/studentData.geojson")
+Houses <- st_read("data/studentData.geojson") %>%
+  st_transform(crs = coordinate_system)
 
 ```
 
@@ -68,8 +70,8 @@ Houses$min_distance <- min_distances
 Compute percent canopy cover within 500ft
 ```{r}
 # Sample Houses for testing
-n_sample <- nrow(Houses) * 0.01
-Houses_sample <- st_sample(Houses, size = n_sample)
+n_sample <- round(nrow(Houses) * 0.001)
+Houses_sample <- Houses[sample(nrow(Houses), n_sample), ]
 
 # Create buffers around each house
 HouseBuffers <- st_buffer(Houses_sample, dist = 100)
@@ -80,13 +82,13 @@ CanopyPct100ft <- vector("numeric", length = nrow(Houses_sample))
 # Loop through each house buffer
 for (i in 1:nrow(HouseBuffers)) {
 # Calculate the intersection area between the current house buffer and the tree canopy
-intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], tree_canopy)))
+intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
   
 # Calculate the canopy coverage percent for the current house buffer
 CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
 
 # Add the canopy coverage percent values to the Houses data frame
-Houses$CanopyPct100ft <- CanopyPct100ft
+Houses_sample$CanopyPct100ft <- CanopyPct100ft
 
 ```
 
