@@ -19,15 +19,19 @@ library(rgdal)
 
 # Coordinate System
 coordinate_system <- 2272
+
+Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
+
 ```
 
 ## Read the data back in (copy-paste this to the new document)
 ```{r}
-Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
-TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+Houses <- st_read("data/studentData.geojson") %>%
+  st_transform(crs = coordinate_system)
 
-# !!!File corrupted?
-landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/landuse.geojson")
+##OA Local files
+TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")
 
 
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
@@ -49,9 +53,11 @@ landcare_lots <- st_read("data/landcare_lots.geojson")
 
 tracts2020 <- st_read("data/tracts2020.geojson")
 
-Houses <- st_read("data/studentData.geojson") %>%
-  st_transform(crs = coordinate_system)
-
+```
+```{r}
+# Sample Data for testing
+n_sample <- round(nrow(Houses) * 0.001)
+Houses <- Houses[sample(nrow(Houses), n_sample), ]
 ```
 
 Compute min dist to trails and bike network
@@ -63,21 +69,17 @@ distances <- st_distance(Houses, bike_network)
 min_distances <- apply(distances, 1, min)
 
 # Join the minimum distances to the attribute table of the points
-Houses$min_distance <- min_distances
+Houses$dist2bike <- min_distances
 
 ```
 
 Compute percent canopy cover within 500ft
-```{r}
-# Sample Houses for testing
-n_sample <- round(nrow(Houses) * 0.001)
-Houses_sample <- Houses[sample(nrow(Houses), n_sample), ]
-
+```{r warning = FALSE}
 # Create buffers around each house
-HouseBuffers <- st_buffer(Houses_sample, dist = 100)
+HouseBuffers <- st_buffer(Houses, dist = 100)
 
 # Initialize an empty vector to store the canopy coverage percent for each house
-CanopyPct100ft <- vector("numeric", length = nrow(Houses_sample))
+CanopyPct100ft <- vector("numeric", length = nrow(Houses))
 
 # Loop through each house buffer
 for (i in 1:nrow(HouseBuffers)) {
@@ -88,7 +90,7 @@ intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy))
 CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
 
 # Add the canopy coverage percent values to the Houses data frame
-Houses_sample$CanopyPct100ft <- CanopyPct100ft
+Houses$CanopyPct100ft <- CanopyPct100ft
 
 ```
 
