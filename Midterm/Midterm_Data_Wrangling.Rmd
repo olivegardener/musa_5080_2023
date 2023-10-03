@@ -193,26 +193,6 @@ st_write(tracts2020, "data/tracts2020.geojson", delete_dsn = TRUE)
 ```
 
 
-### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-### Calculate distances to features (non-KNN method, change vars as needed)
-```{r }
-# # Initialize an empty vector to store distances
-# nearest_distances <- vector("numeric", length = nrow(Building_Pts))
-# 
-# # Loop through each centroid to find the nearest point in FIRST and calculate the distance
-# for (i in 1:nrow(Building_Pts)) {
-#   centroid <- Building_Pts[i, ]
-#   nearest_index <- st_nearest_feature(centroid, highways)
-#   nearest_point <- highways[nearest_index, ]
-#   distance <- st_distance(centroid, nearest_point)
-#   
-# # Store the distance & convert to miles
-# nearest_distances[i] <- as.numeric(distance/5280)}
-# 
-# # Add the distances to the cropped_allTracts_bay dataframe
-# Buildings_Poly$Dist2Highway <- nearest_distances
-```
-
 
 ```{r correlation matrix, fig.width=7, fig.height=5, fig.width=8}
 # #make matrix of variables we're testing

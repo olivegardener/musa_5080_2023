@@ -36,6 +36,7 @@ library(ggstance) # to support jtools plots
 library(ggpubr)    # plotting R^2 value on ggplot point scatter
 library(broom.mixed) # needed for effects plots
 library(lubridate)
+library(stargazer)
 
 # Coordinate System
 coordinate_system <- 2272
@@ -92,7 +93,7 @@ septa_highspeed <- septa %>%
 ### Sample Data (for testing)
 ```{r}
 # Sample Data for testing
-# n_sample <- round(nrow(Houses) * 0.01)
+# n_sample <- round(nrow(Houses) * 0.1)
 # Houses <- Houses[sample(nrow(Houses), n_sample), ]
 ```
 
@@ -102,6 +103,7 @@ Houses <- Houses %>%
           st_join(dplyr::select(Recycling_Diversion_Rate, SCORE)) %>% 
           st_join(dplyr::select(neighborhoods, NAME)) %>%
           st_join(dplyr::select(catchments, ES_Name)) %>%
+          st_join(dplyr::select(Redlined, holc_grade)) %>%
           st_join(dplyr::select(tracts2020, MedHHInc, MedRent, HomeOwnRate, PopDensity, PctWhite, PctBach, Car2WorkPct)) %>%
           rename(RecyclingRate = SCORE,
                  Neighborhood = NAME,
@@ -183,6 +185,30 @@ Houses <- Houses %>%
 
 ```
 
+
+```{r deliverables packages}
+palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+
+```
+
+Deliverables
+
+# Introduction
+
+# Summary Statistics
+
+```{r stargazer table}
+
+# Convert sf object to data frame
+Houses_df <- as.data.frame(Houses)
+
+# Use stargazer
+stargazer(Houses_df, type = "text", title = "Table 1: Summary Statistics")
+
+
+```
+### Dave to look into organizing stargazer table by internal characteristics, amenities/public services or spatial structure
+
 ### Correlogram
 ```{r correlation matrix, fig.width=14}
 # Select variables of interest and convert them to numeric
@@ -205,6 +231,212 @@ ggcorrplot(
     legend.text = element_text(size = 6)        # Legend text size
   ) 
 
+```
+
+# Home Price Scatterplots
+Example from book for facetwrap scatterplots
+
+```{r scatterplots, fig.width=9, fig.height=3}
+
+st_drop_geometry(Houses) %>% 
+  select(sale_price, vacant_lots_nn5, dist2bike, septa_bus_nn5, collisions_nn3) %>%
+  filter(sale_price <= quantile(sale_price, 0.9)) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(log(Value), sale_price)) +
+     geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 4, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
 
 ```
 
+# Map Home Prices
+
+Follow book - map quintile breaks over neighborhoods 
+```{r map home prices}
+nhoods <- 
+  st_read("data/neighborhoods.geojson") %>%
+  st_transform(coordinate_system)
+
+#book used price per square foot
+ggplot() +
+  geom_sf(data = nhoods, fill = "grey40") +
+  geom_sf(data = Houses, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .01) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(Houses,"sale_price"),
+                   name="Quintile\nBreaks") +
+  labs(title="Sale Price, Philly") +
+  mapTheme()
+
+
+```
+
+# 3 Interesting Maps (bonus for something extra engaging)
+
+```{r heatmap}
+Houses_age <-
+  Houses %>%
+    na.omit() %>%
+    st_as_sf(coords = c("Long", "Lat"), crs = 4326, agr = "constant") %>%
+    st_transform(coordinate_system) %>%
+    distinct()
+
+ggplot() + geom_sf(data = nhoods, fill = "white") +
+  stat_density2d(data = data.frame(st_coordinates(Houses_age)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#E1B93C", high = "#a02300", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Home Age, Philly") +
+  mapTheme()
+
+```
++ map for collisions
++ map for distance to bike lanes
++ map for trees
++ others?
+
+# Methods
+
+# Table of Results (Training Set)
+
+```{r regression training set}
+
+reg1 <- lm(sale_price ~ ., data = st_drop_geometry(Houses))
+                                 # dplyr::select(SalePrice, LivingArea, Style, 
+                                 #               GROSS_AREA, R_TOTAL_RM, NUM_FLOORS,
+                                 #               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
+                                 #               R_KITCH, R_AC, R_FPLACE))
+summary(reg1)
+# Check the levels of factor variables
+lapply(Houses, function(x) if(is.factor(x)) levels(x))
+
+```
+
+# Table of Goodness of Fit (Test Set)
+
+# CV Results
+
+Example from book
+
+```{r cross validation}
+
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(825)
+
+reg.cv <- 
+  train(sale_price ~ ., data = st_drop_geometry(training) %>% 
+                                dplyr::select(sale_price, 
+                                number_stories, 
+                                number_of_bathrooms, 
+                                number_of_bedrooms), 
+     method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+```
+
+# Pred vs Obs Scatterplot
+
+Example from book
+
+```{r pred and obs}
+bothRegressions %>%
+  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
+    ggplot(aes(SalePrice, SalePrice.Predict)) +
+  geom_point() +
+  stat_smooth(aes(SalePrice, SalePrice), 
+             method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
+  plotTheme()
+
+```
+
+# Residuals Map w/ Moran's I
+
+# Predicted Map (Test Set)
+
+# MAPE map by neighborhood
+
+Example from book
+
+```{r mape map}
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, Name) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(nhoods) %>%
+    st_sf() %>%
+    ggplot() + 
+      geom_sf(aes(fill = mean.MAPE)) +
+      geom_sf(data = bothRegressions, colour = "black", size = .5) +
+      facet_wrap(~Regression) +
+      scale_fill_gradient(low = palette5[1], high = palette5[5],
+                          name = "MAPE") +
+      labs(title = "Mean test set MAPE by neighborhood") +
+      mapTheme()
+
+```
+
+# Scatterplot - MAPE by neighborhood mean price
+
+
+
+# Split by Census Groups
+
+Example from book
+
+```{r tracts}
+tracts17 <- 
+  get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E","B06011_001"), 
+          year = 2017, state=25, county=025, geometry=T, output = "wide") %>%
+  st_transform('ESRI:102286')  %>%
+  rename(TotalPop = B01001_001E,
+         NumberWhites = B01001A_001E,
+         Median_Income = B06011_001E) %>%
+  mutate(percentWhite = NumberWhites / TotalPop,
+         raceContext = ifelse(percentWhite > .5, "Majority White", "Majority Non-White"),
+         incomeContext = ifelse(Median_Income > 32322, "High Income", "Low Income"))
+
+grid.arrange(ncol = 2,
+  ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = raceContext)) +
+    scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
+    labs(title = "Race Context") +
+    mapTheme() + theme(legend.position="bottom"), 
+  ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = incomeContext)) +
+    scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
+    labs(title = "Income Context") +
+    mapTheme() + theme(legend.position="bottom"))
+
+#MAPE for both regressions by race
+st_join(bothRegressions, tracts17) %>% 
+  group_by(Regression, raceContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(raceContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context")
+
+#MAPE for both regressions by income
+st_join(bothRegressions, tracts17) %>% 
+  filter(!is.na(incomeContext)) %>%
+  group_by(Regression, incomeContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(incomeContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood income context")
+
+```
+
+# Discussion
+## Accuracy
+
+## Generalizability
+
+# Conclusion and Recommendation
