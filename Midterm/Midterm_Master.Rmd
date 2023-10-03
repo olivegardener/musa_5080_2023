@@ -53,7 +53,7 @@ Houses <- st_read("data/studentData.geojson") %>%
                   fireplaces, garage_spaces, interior_condition, number_of_bathrooms, number_of_bedrooms, number_of_rooms,
                   number_stories, quality_grade, sale_date, total_area, total_livable_area, type_heater, year_built, 
                   building_code_description_new, musaID, geometry) %>% 
-    mutate(age = year_built-2023) %>% 
+    mutate(age = 2023-year_built) %>% 
     dplyr::select(-year_built)
 
 ```
@@ -311,8 +311,6 @@ reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric
                                  #               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
                                  #               R_KITCH, R_AC, R_FPLACE))
 summary(reg1)
-# Check the levels of factor variables
-lapply(Houses, function(x) if(is.factor(x)) levels(x))
 
 ```
 
