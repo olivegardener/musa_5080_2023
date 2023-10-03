@@ -78,7 +78,6 @@ parks <- st_read("data/parks.geojson")
 uni <- st_read("data/uni.geojson")
 neighborhoods <- st_read("data/neighborhoods.geojson")
 landcare_lots <- st_read("data/landcare_lots.geojson")
-highways <- st_read("data/highways.geojson")
 tracts2020 <- st_read("data/tracts2020.geojson")
 septa <- st_read("data/septa.geojson")
 septa_bus <- septa %>% 
@@ -108,11 +107,11 @@ Houses <- Houses %>%
                  Neighborhood = NAME,
                  MedHHInc_ACS = MedHHInc,
                  MedRent_ACS = MedRent,
-                 HomeOwnRate_ACS = HomeOwnRate,
                  PopDensity_ACS = PopDensity,
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
-                 Car2WorkPct_ACS = Car2WorkPct)
+                 Car2WorkPct_ACS = Car2WorkPct) %>% 
+          select(-HomeOwnRate)
 
 ```
 
@@ -131,16 +130,9 @@ distances <- st_distance(Houses, bike_network)
 min_distances <- apply(distances, 1, min)
 Houses$dist2bike <- min_distances
 
-## Highways
-distances <- st_distance(Houses, highways)
-min_distances <- apply(distances, 1, min)
-Houses$dist2highway <- min_distances
-
 # Parks
 distances <- st_distance(Houses, parks)
-# Compute the minimum distance for each point to the nearest polygon
 min_distances <- apply(distances, 1, min)
-# Add the minimum distances to the attribute table of the points
 Houses$dist2park <- min_distances
 
 ```
@@ -181,15 +173,12 @@ Houses <- Houses %>%
                               st_coordinates(septa_highspeed), k = 1),
            collisions_nn3 = nn_function(st_coordinates(Houses), 
                               st_coordinates(Traffic_Collisions), k = 3), #data old, keep?
-           # trees_nn20 = nn_function(st_coordinates(Houses), 
-           #                    st_coordinates(trees), k = 20),
            unis_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(uni)), k = 1),
            landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(landcare_lots)), k = 3),
            vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(Vacant_Lots)), k = 5),
-           sale_YYYY.Q = quarter(ymd(Houses$sale_date), type = "year.quarter")) %>% 
+                              st_coordinates(st_centroid(Vacant_Lots)), k = 5)) %>% 
     filter(sale_price != 0)
 
 ```
@@ -198,7 +187,7 @@ Houses <- Houses %>%
 ```{r correlation matrix, fig.width=14}
 # Select variables of interest and convert them to numeric
 vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
-  select(-musaID, -sale_YYYY.Q, -dist2highway, -HomeOwnRate_ACS) %>% 
+  select(-musaID) %>% 
   na.omit()
 
 # vars_of_interest <- Houses %>% 
@@ -221,6 +210,9 @@ ggcorrplot(
     legend.text = element_text(size = 6)        # Legend text size
   ) 
 
+
+```
+```{r}
 
 ```
 
