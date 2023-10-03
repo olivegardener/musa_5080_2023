@@ -305,7 +305,7 @@ ggplot() + geom_sf(data = nhoods, fill = "white") +
 
 ```{r regression training set}
 
-reg1 <- lm(sale_price ~ ., data = st_drop_geometry(Houses))
+reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
                                  # dplyr::select(SalePrice, LivingArea, Style, 
                                  #               GROSS_AREA, R_TOTAL_RM, NUM_FLOORS,
                                  #               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
