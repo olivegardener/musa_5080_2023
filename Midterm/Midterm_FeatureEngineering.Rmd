@@ -64,6 +64,7 @@ Houses <- st_read("data/studentData.geojson") %>%
 landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
   st_transform(crs = coordinate_system)
 
+Redlined <- st_read("data/redlining.geojson")
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
 Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
 Hospitals <- st_read("data/Hospitals.geojson")
@@ -91,8 +92,8 @@ septa_highspeed <- septa %>%
 ### Sample Data (for testing)
 ```{r}
 # Sample Data for testing
-n_sample <- round(nrow(Houses) * 0.01)
-Houses <- Houses[sample(nrow(Houses), n_sample), ]
+# n_sample <- round(nrow(Houses) * 0.01)
+# Houses <- Houses[sample(nrow(Houses), n_sample), ]
 ```
 
 ### Extract polygon data to points
@@ -133,6 +134,13 @@ distances <- st_distance(Houses, highways)
 min_distances <- apply(distances, 1, min)
 Houses$dist2highway <- min_distances
 
+# Parks
+distances <- st_distance(Houses, parks)
+# Compute the minimum distance for each point to the nearest polygon
+min_distances <- apply(distances, 1, min)
+# Add the minimum distances to the attribute table of the points
+Houses$dist2park <- min_distances
+
 ```
 
 ### Compute percent canopy cover within 500ft
@@ -171,12 +179,10 @@ Houses <- Houses %>%
                               st_coordinates(septa_highspeed), k = 1),
            collisions_nn3 = nn_function(st_coordinates(Houses), 
                               st_coordinates(Traffic_Collisions), k = 3), #data old, keep?
-           trees_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(trees), k = 5),
+           # trees_nn20 = nn_function(st_coordinates(Houses), 
+           #                    st_coordinates(trees), k = 20),
            unis_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(uni)), k = 1),
-           parks_nn2 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(parks)), k = 2),
            landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(landcare_lots)), k = 3),
            vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
@@ -187,9 +193,11 @@ Houses <- Houses %>%
 ```
 
 ### Correlogram
-```{r correlation matrix, fig.width=10}
+```{r correlation matrix, fig.width=14}
 # Select variables of interest and convert them to numeric
-vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% na.omit()
+vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
+  select(-musaID, -sale_YYYY.Q, -dist2highway, -HomeOwnRate_ACS) %>% 
+  na.omit()
 
 # vars_of_interest <- Houses %>% 
 #   dplyr::select(sale_price, MedHHInc_ACS, MedRent_ACS, HomeOwnRate_ACS, RecyclingRate, exterior_condition, interior_condition, fireplaces, garage_spaces, number_of_bathrooms, number_of_bedrooms, number_stories, total_area, total_livable_area, PopDensity_ACS, PctWhite_ACS, Car2WorkPct_ACS) %>% 
@@ -202,7 +210,14 @@ ggcorrplot(
   colors = c("#25CB10", "white", "#FA7800"),
   type="lower",
   insig = "blank") +  
-    labs(title = "Correlation across numeric variables") 
+    labs(title = "Correlation across numeric variables") +
+  theme(
+    title = element_text(size = 6),            # Title text size
+    axis.title = element_text(size = 6),        # Axis title text size
+    axis.text = element_text(size = 6),         # Axis text size
+    legend.title = element_text(size = 6),      # Legend title text size
+    legend.text = element_text(size = 6)        # Legend text size
+  ) 
 
 
 ```
