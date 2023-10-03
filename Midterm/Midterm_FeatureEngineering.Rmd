@@ -16,6 +16,7 @@ library(ggplot2)
 library(units)
 library(httr)
 library(rgdal)
+library(corrplot)
 
 # Coordinate System
 coordinate_system <- 2272
@@ -25,24 +26,19 @@ Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 ```
 
 ## Read the data back in (copy-paste this to the new document)
-```{r}
-Houses <- st_read("data/studentData.geojson") %>%
-  st_transform(crs = coordinate_system)
-
+```{r, message=FALSE}
 ##OA Local files
-#TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
-#landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")
-
+# TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+# landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
+#   st_transform(crs = coordinate_system)
 
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
 Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
 Hospitals <- st_read("data/Hospitals.geojson")
 Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
-
 Existing_Trails <- st_read("data/Existing_Trails.geojson")
 Trolley_Stops <- st_read("data/Trolley_Stops.geojson")
-PhillyHealth_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
-
+Traffic_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
 trees <- st_read("data/trees.geojson")
 bike_network <- st_read("data/bike_network.geojson")
 parks <- st_read("data/parks.geojson")
@@ -50,33 +46,95 @@ uni <- st_read("data/uni.geojson")
 neighborhoods <- st_read("data/neighborhoods.geojson")
 septa <- st_read("data/septa.geojson")
 landcare_lots <- st_read("data/landcare_lots.geojson")
-
+highways <- st_read("data/highways.geojson")
 tracts2020 <- st_read("data/tracts2020.geojson")
 
 ```
+
+### Load studentData
+```{r warning=FALSE}
+Houses <- st_read("data/studentData.geojson") %>%
+  st_transform(crs = coordinate_system) %>% 
+    dplyr::select(sale_price, basements, building_code_description, category_code_description, central_air, exterior_condition,
+                  fireplaces, garage_spaces, interior_condition, number_of_bathrooms, number_of_bedrooms, number_of_rooms,
+                  number_stories, quality_grade, sale_date, total_area, total_livable_area, type_heater, year_built, 
+                  building_code_description_new, musaID, geometry) %>% 
+    mutate(age = year_built-2023) %>% 
+    dplyr::select(-year_built)
+
+```
+
+### Sample Data (for testing)
 ```{r}
 # Sample Data for testing
 n_sample <- round(nrow(Houses) * 0.001)
 Houses <- Houses[sample(nrow(Houses), n_sample), ]
 ```
 
-Compute min dist to trails and bike network
+### Extract polygon data to points
 ```{r}
-# Compute distances
-distances <- st_distance(Houses, bike_network)
-
-# Compute the minimum distance for each point to the nearest line
-min_distances <- apply(distances, 1, min)
-
-# Join the minimum distances to the attribute table of the points
-Houses$dist2bike <- min_distances
+Houses <- Houses %>% 
+          st_join(dplyr::select(Recycling_Diversion_Rate, SCORE)) %>% 
+          st_join(dplyr::select(neighborhoods, NAME)) %>% 
+          st_join(dplyr::select(tracts2020, MedHHInc, MedRent, HomeOwnRate, PopDensity, PctWhite, PctBach, Car2WorkPct)) %>%
+          rename(RecyclingRate = SCORE,
+                 Neighborhood = NAME,
+                 MedHHInc_ACS = MedHHInc,
+                 MedRent_ACS = MedRent,
+                 HomeOwnRate_ACS = HomeOwnRate,
+                 PopDensity_ACS = PopDensity,
+                 PctWhite_ACS = PctWhite,
+                 PctBach_ACS = PctBach,
+                 Car2WorkPct_ACS = Car2WorkPct)
+head(Houses)
 
 ```
 
-Compute percent canopy cover within 500ft
+### Correlogram
+```{r correlation matrix}
+# Select variables of interest and convert them to numeric
+vars_of_interest <- Houses %>% 
+  dplyr::select(sale_price, MedHHInc_ACS, MedRent_ACS, HomeOwnRate_ACS, RecyclingRate, exterior_condition, interior_condition, fireplaces, garage_spaces, number_of_bathrooms, number_of_bedrooms, number_stories, total_area, total_livable_area, PopDensity_ACS, PctWhite_ACS, Car2WorkPct_ACS) %>% 
+  st_set_geometry(NULL) %>% 
+  glimpse()
+
+# Compute correlation matrix and round the values
+corrmatrix <- cor(vars_of_interest) %>% 
+  round(., 2)
+
+
+#plot a correlogram
+corrplot(corrmatrix, method = "circle", type = "lower", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+
+### Compute min dist to trails and bike network
+```{r}
+## Trails
+# Compute distances
+distances <- st_distance(Houses, Existing_Trails)
+# Compute the minimum distance for each point to the nearest line
+min_distances <- apply(distances, 1, min)
+# Join the minimum distances to the attribute table of the points
+Houses$dist2trail <- min_distances
+
+## Bike Network
+distances <- st_distance(Houses, bike_network)
+min_distances <- apply(distances, 1, min)
+Houses$dist2bike <- min_distances
+
+## Highways
+distances <- st_distance(Houses, highways)
+min_distances <- apply(distances, 1, min)
+Houses$dist2highway <- min_distances
+
+```
+
+### Compute percent canopy cover within 500ft
 ```{r warning = FALSE}
 # Create buffers around each house
-HouseBuffers <- st_buffer(Houses, dist = 100)
+HouseBuffers <- st_buffer(Houses, dist = (0.25*5280))
 
 # Initialize an empty vector to store the canopy coverage percent for each house
 CanopyPct100ft <- vector("numeric", length = nrow(Houses))
@@ -90,25 +148,12 @@ intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy))
 CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
 
 # Add the canopy coverage percent values to the Houses data frame
-Houses$CanopyPct100ft <- CanopyPct100ft
+Houses$CanopyPctQuMi <- CanopyPct100ft
 
 ```
 
 
-```{r correlation matrix, fig.width=7, fig.height=5, fig.width=8}
 
-#make matrix of variables we're testing
-mod_vars <- Dat_A %>% 
-  dplyr::select(var1, var2, var3)
-
-#compute correlation matrix
-cormatrix <- cor(mod_vars) %>% 
-  round(., 2)
-
-#plot a correlogram
-corrplot(cormatrix, method = "circle", type = "lower", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
-```
 
 
 ```{r datasets setup}

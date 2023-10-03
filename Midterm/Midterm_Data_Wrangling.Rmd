@@ -134,8 +134,8 @@ tracts2020 <-
          PctWhite = (White/TotalPop),
          PctBach = ifelse(TotalPop > 0, ((NumBach) / TotalPop), 0),
          HouseAge = (2020 - YrBuilt),
-         Car2WorkPct = (Car2Work/TotalPop)) %>%
-  dplyr::select(-NAME, -White, -NumBach, -YrBuilt, -Car2Work, -starts_with("B"))
+         Car2WorkPct = (Car2Work/TotalPop)*100) %>%
+  dplyr::select(-NAME, -White, -NumBach, -YrBuilt, -Car2Work, -TotalPop, -area, -starts_with("D"), -starts_with("B"))
 ```
 
 ## OSM Data
@@ -186,7 +186,10 @@ st_write(neighborhoods, "data/neighborhoods.geojson", delete_dsn = TRUE)
 st_write(septa, "data/septa.geojson", delete_dsn = TRUE)
 st_write(landcare_lots, "data/landcare_lots.geojson", delete_dsn = TRUE)
 
+st_write(highways, "data/highways.geojson", delete_dsn = TRUE)
+
 st_write(tracts2020, "data/tracts2020.geojson", delete_dsn = TRUE)
+
 ```
 
 
