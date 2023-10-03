@@ -38,6 +38,21 @@ palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
 
 ```
 
+```{r load data}
+
+#REPLACEME
+
+#Confirm clean data
+
+```
+
+```{r train and test sets}
+
+#REPLACEME
+
+```
+
+
 Deliverable
 
 # Introduction
@@ -59,7 +74,7 @@ Example from book for matrix
 ```{r correlation matrix}
 
 numericVars <- 
-  select_if(st_drop_geometry(boston.sf), is.numeric) %>% na.omit()
+  select_if(st_drop_geometry(training), is.numeric) %>% na.omit()
 
 ggcorrplot(
   round(cor(numericVars), 1), 
@@ -77,12 +92,11 @@ Example from book for facetwrap scatterplots
 
 ```{r scatterplots}
 
-st_drop_geometry(boston.sf) %>% 
-  mutate(Age = 2015 - YR_BUILT) %>%
-  dplyr::select(SalePrice, LivingArea, Age, GROSS_AREA) %>%
-  filter(SalePrice <= 1000000, Age < 500) %>%
-  gather(Variable, Value, -SalePrice) %>% 
-   ggplot(aes(Value, SalePrice)) +
+st_drop_geometry(training) %>% 
+  select(sale_price, total_livable_area, age, total_area) %>%
+  filter(sale_price <= 1000000, age < 500) %>%
+  gather(Variable, Value, -sale_price) %>% 
+   ggplot(aes(Value, sale_price)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
      facet_wrap(~Variable, ncol = 3, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
@@ -96,18 +110,15 @@ Follow book - map quintile breaks over neighborhoods
 ```{r map home prices}
 nhoods <- 
   st_read("data/neighborhoods.geojson") %>%
-  st_transform(crs = 2272)
-
-philly <- st_read("data/studentData.geojson") %>%
-  st_transform(crs = 2272)
+  st_transform(coordinate_system)
 
 #book used price per square foot
 ggplot() +
   geom_sf(data = nhoods, fill = "grey40") +
-  geom_sf(data = philly, aes(colour = q5(sale_price)), 
+  geom_sf(data = training, aes(colour = q5(sale_price)), 
           show.legend = "point", size = .75) +
   scale_colour_manual(values = palette5,
-                   labels=qBr(philly,"sale_price"),
+                   labels=qBr(training,"sale_price"),
                    name="Quintile\nBreaks") +
   labs(title="Sale Price, Philly") +
   mapTheme()
@@ -121,25 +132,23 @@ Example of heat map from book
 
 ```{r heatmap}
 
-bostonCrimes.sf <-
-  bostonCrimes %>%
-    filter(OFFENSE_CODE_GROUP == "Aggravated Assault",
-           Lat > -1) %>%
-    dplyr::select(Lat, Long) %>%
+training_age <-
+  training %>%
+    filter(age < 500) %>%
     na.omit() %>%
     st_as_sf(coords = c("Long", "Lat"), crs = 4326, agr = "constant") %>%
-    st_transform('ESRI:102286') %>%
+    st_transform(coordinate_system) %>%
     distinct()
 
 ggplot() + geom_sf(data = nhoods, fill = "grey40") +
-  stat_density2d(data = data.frame(st_coordinates(bostonCrimes.sf)), 
+  stat_density2d(data = data.frame(st_coordinates(training_age)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
   scale_fill_gradient(low = "#25CB10", high = "#FA7800", 
                       breaks=c(0.000000003,0.00000003),
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Aggravated Assaults, Boston") +
+  labs(title = "Density of Home Age, Philly") +
   mapTheme()
 ```
 
@@ -172,12 +181,11 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(SalePrice ~ ., data = st_drop_geometry(boston.sf) %>% 
-                                dplyr::select(SalePrice, 
-                                LivingArea, Style, GROSS_AREA, 
-                                NUM_FLOORS.cat, R_BDRMS, R_FULL_BTH, 
-                                R_HALF_BTH, R_KITCH, R_AC, 
-                                R_FPLACE, crimes.Buffer), 
+  train(sale_price ~ ., data = st_drop_geometry(training) %>% 
+                                dplyr::select(sale_price, 
+                                number_stories, 
+                                number_of_bathrooms, 
+                                number_of_bedrooms), 
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv

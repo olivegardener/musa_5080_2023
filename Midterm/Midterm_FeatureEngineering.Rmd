@@ -30,8 +30,8 @@ Houses <- st_read("data/studentData.geojson") %>%
   st_transform(crs = coordinate_system)
 
 ##OA Local files
-TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
-landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")
+#TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+#landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")
 
 
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
@@ -108,6 +108,84 @@ cormatrix <- cor(mod_vars) %>%
 #plot a correlogram
 corrplot(cormatrix, method = "circle", type = "lower", order = "hclust", 
          tl.col = "black", tl.srt = 45)
+```
+
+
+```{r datasets setup}
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+
+#some of these are repetitive with above - from Intro_to_ML_Pt`
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot) # plot correlation plot
+library(corrr)      # another way to plot correlation plot
+library(kableExtra)
+library(jtools)     # for regression model plots
+library(ggstance) # to support jtools plots
+library(ggpubr)    # plotting R^2 value on ggplot point scatter
+library(broom.mixed) # needed for effects plots
+library(lubridate)
+
+septa_bus <- septa %>% 
+  filter(mode == "Bus")
+septa_trolley <- septa %>% 
+  filter(mode == "Trolley")
+septa_highspeed <- septa %>% 
+  filter(mode == "Highspeed")
+
+nhoods <- st_read("data/neighborhoods.geojson") %>%
+  select(NAME, geometry)
+```
+
+```{r training data}
+#need tree canopy
+#discuss k's
+training <-
+  Houses %>%
+  select(musaID, sale_price, sale_date, toPredict, geometry, exterior_condition, garage_spaces, number_stories, number_of_bathrooms, number_of_bedrooms, sale_year, total_area, total_livable_area, year_built) %>%
+    mutate(
+      hospitals_nn1 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(Hospitals), k = 1),
+      rr_station_nn1 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(Regional_Rail_Stations), k = 1),
+      septa_trolley_nn1 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(septa_trolley), k = 1),
+      septa_bus_nn5 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(septa_bus), k = 5),
+      septa_highspeed_nn1 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(septa_highspeed), k = 1),
+      collisions_nn3 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(PhillyHealth_Collisions), k = 3), #data old, keep?
+      trees_nn5 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(trees), k = 5),
+      unis_nn1 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(st_centroid(uni)), k = 1),
+      parks_nn2 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(st_centroid(parks)), k = 2),
+      landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(st_centroid(landcare_lots)), k = 3),
+      vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(st_centroid(Vacant_Lots)), k = 5),
+      dist2bike = min_distances,
+      sale_YYYY.Q = quarter(ymd(Houses$sale_date), type = "year.quarter"),
+      age = 2023 - year_built) %>%
+  filter(sale_price != 0)
+
+```
+
+```{r test data}
+#copy above and set filter at end = 0
+
+# test <-
 ```
 
 ## Including Plots
