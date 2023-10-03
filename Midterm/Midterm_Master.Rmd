@@ -302,14 +302,13 @@ ggplot() + geom_sf(data = nhoods, fill = "white") +
 # Methods
 
 # Table of Results (Training Set)
+### oliver to whittle down to statistically relevant vars
+### remove challenge data, split into training and test sets
 
 ```{r regression training set}
 
 reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
-                                 # dplyr::select(SalePrice, LivingArea, Style, 
-                                 #               GROSS_AREA, R_TOTAL_RM, NUM_FLOORS,
-                                 #               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
-                                 #               R_KITCH, R_AC, R_FPLACE))
+
 summary(reg1)
 
 ```
@@ -438,3 +437,4 @@ st_join(bothRegressions, tracts17) %>%
 ## Generalizability
 
 # Conclusion and Recommendation
+
