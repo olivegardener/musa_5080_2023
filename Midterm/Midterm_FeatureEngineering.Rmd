@@ -10,44 +10,37 @@ rm(list=ls())
 
 knitr::opts_chunk$set(echo = TRUE)
 
-library(dplyr)
-library(sf)
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+#some of these are repetitive with above - from Intro_to_ML_Pt`
 library(ggplot2)
 library(units)
 library(httr)
 library(rgdal)
 library(corrplot)
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot) # plot correlation plot
+library(corrr)      # another way to plot correlation plot
+library(kableExtra)
+library(jtools)     # for regression model plots
+library(ggstance) # to support jtools plots
+library(ggpubr)    # plotting R^2 value on ggplot point scatter
+library(broom.mixed) # needed for effects plots
+library(lubridate)
 
 # Coordinate System
 coordinate_system <- 2272
 
 Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
-
-```
-
-## Read the data back in (copy-paste this to the new document)
-```{r, message=FALSE}
-##OA Local files
-# TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
-# landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
-#   st_transform(crs = coordinate_system)
-
-Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
-Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
-Hospitals <- st_read("data/Hospitals.geojson")
-Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
-Existing_Trails <- st_read("data/Existing_Trails.geojson")
-Trolley_Stops <- st_read("data/Trolley_Stops.geojson")
-Traffic_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
-trees <- st_read("data/trees.geojson")
-bike_network <- st_read("data/bike_network.geojson")
-parks <- st_read("data/parks.geojson")
-uni <- st_read("data/uni.geojson")
-neighborhoods <- st_read("data/neighborhoods.geojson")
-septa <- st_read("data/septa.geojson")
-landcare_lots <- st_read("data/landcare_lots.geojson")
-highways <- st_read("data/highways.geojson")
-tracts2020 <- st_read("data/tracts2020.geojson")
 
 ```
 
@@ -64,10 +57,41 @@ Houses <- st_read("data/studentData.geojson") %>%
 
 ```
 
+## Read wrangled data
+```{r, message=FALSE}
+##OA Local files
+# TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
+landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
+  st_transform(crs = coordinate_system)
+
+Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
+Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
+Hospitals <- st_read("data/Hospitals.geojson")
+Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
+Existing_Trails <- st_read("data/Existing_Trails.geojson")
+Traffic_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
+trees <- st_read("data/trees.geojson")
+bike_network <- st_read("data/bike_network.geojson")
+parks <- st_read("data/parks.geojson")
+uni <- st_read("data/uni.geojson")
+neighborhoods <- st_read("data/neighborhoods.geojson")
+landcare_lots <- st_read("data/landcare_lots.geojson")
+highways <- st_read("data/highways.geojson")
+tracts2020 <- st_read("data/tracts2020.geojson")
+septa <- st_read("data/septa.geojson")
+septa_bus <- septa %>% 
+  filter(mode == "Bus")
+septa_trolley <- septa %>% 
+  filter(mode == "Trolley")
+septa_highspeed <- septa %>% 
+  filter(mode == "Highspeed")
+
+```
+
 ### Sample Data (for testing)
 ```{r}
 # Sample Data for testing
-n_sample <- round(nrow(Houses) * 0.001)
+n_sample <- round(nrow(Houses) * 0.01)
 Houses <- Houses[sample(nrow(Houses), n_sample), ]
 ```
 
@@ -86,28 +110,8 @@ Houses <- Houses %>%
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
                  Car2WorkPct_ACS = Car2WorkPct)
-head(Houses)
 
 ```
-
-### Correlogram
-```{r correlation matrix}
-# Select variables of interest and convert them to numeric
-vars_of_interest <- Houses %>% 
-  dplyr::select(sale_price, MedHHInc_ACS, MedRent_ACS, HomeOwnRate_ACS, RecyclingRate, exterior_condition, interior_condition, fireplaces, garage_spaces, number_of_bathrooms, number_of_bedrooms, number_stories, total_area, total_livable_area, PopDensity_ACS, PctWhite_ACS, Car2WorkPct_ACS) %>% 
-  st_set_geometry(NULL) %>% 
-  glimpse()
-
-# Compute correlation matrix and round the values
-corrmatrix <- cor(vars_of_interest) %>% 
-  round(., 2)
-
-
-#plot a correlogram
-corrplot(corrmatrix, method = "circle", type = "lower", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
-```
-
 
 ### Compute min dist to trails and bike network
 ```{r}
@@ -133,112 +137,73 @@ Houses$dist2highway <- min_distances
 
 ### Compute percent canopy cover within 500ft
 ```{r warning = FALSE}
-# Create buffers around each house
-HouseBuffers <- st_buffer(Houses, dist = (0.25*5280))
-
-# Initialize an empty vector to store the canopy coverage percent for each house
-CanopyPct100ft <- vector("numeric", length = nrow(Houses))
-
-# Loop through each house buffer
-for (i in 1:nrow(HouseBuffers)) {
-# Calculate the intersection area between the current house buffer and the tree canopy
-intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
-  
-# Calculate the canopy coverage percent for the current house buffer
-CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
-
-# Add the canopy coverage percent values to the Houses data frame
-Houses$CanopyPctQuMi <- CanopyPct100ft
+# # Create buffers around each house
+# HouseBuffers <- st_buffer(Houses, dist = (0.25*5280))
+# 
+# # Initialize an empty vector to store the canopy coverage percent for each house
+# CanopyPct100ft <- vector("numeric", length = nrow(Houses))
+# 
+# # Loop through each house buffer
+# for (i in 1:nrow(HouseBuffers)) {
+# # Calculate the intersection area between the current house buffer and the tree canopy
+# intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
+#   
+# # Calculate the canopy coverage percent for the current house buffer
+# CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
+# 
+# # Add the canopy coverage percent values to the Houses data frame
+# Houses$CanopyPctQuMi <- CanopyPct100ft
 
 ```
 
-
-
-
-
-```{r datasets setup}
-root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
-source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
-
-
-#some of these are repetitive with above - from Intro_to_ML_Pt`
-library(tidyverse)
-library(dplyr)
-library(sf)
-library(spdep)
-library(caret)
-library(ckanr)
-library(FNN)
-library(grid)
-library(gridExtra)
-library(ggcorrplot) # plot correlation plot
-library(corrr)      # another way to plot correlation plot
-library(kableExtra)
-library(jtools)     # for regression model plots
-library(ggstance) # to support jtools plots
-library(ggpubr)    # plotting R^2 value on ggplot point scatter
-library(broom.mixed) # needed for effects plots
-library(lubridate)
-
-septa_bus <- septa %>% 
-  filter(mode == "Bus")
-septa_trolley <- septa %>% 
-  filter(mode == "Trolley")
-septa_highspeed <- septa %>% 
-  filter(mode == "Highspeed")
-
-nhoods <- st_read("data/neighborhoods.geojson") %>%
-  select(NAME, geometry)
-```
-
-```{r training data}
-#need tree canopy
-#discuss k's
-training <-
-  Houses %>%
-  select(musaID, sale_price, sale_date, toPredict, geometry, exterior_condition, garage_spaces, number_stories, number_of_bathrooms, number_of_bedrooms, sale_year, total_area, total_livable_area, year_built) %>%
-    mutate(
-      hospitals_nn1 = nn_function(st_coordinates(Houses), 
+### K nearest neighbors
+```{r k nearest neighbors, warning=FALSE}
+Houses <- Houses %>%
+    mutate(hospitals_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(Hospitals), k = 1),
-      rr_station_nn1 = nn_function(st_coordinates(Houses), 
+           rr_station_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(Regional_Rail_Stations), k = 1),
-      septa_trolley_nn1 = nn_function(st_coordinates(Houses), 
+           septa_trolley_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(septa_trolley), k = 1),
-      septa_bus_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(septa_bus), k = 5),
-      septa_highspeed_nn1 = nn_function(st_coordinates(Houses), 
+           septa_bus_nn5 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(septa_bus), k = 5), # look into this?
+           septa_highspeed_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(septa_highspeed), k = 1),
-      collisions_nn3 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(PhillyHealth_Collisions), k = 3), #data old, keep?
-      trees_nn5 = nn_function(st_coordinates(Houses), 
+           collisions_nn3 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(Traffic_Collisions), k = 3), #data old, keep?
+           trees_nn5 = nn_function(st_coordinates(Houses), 
                               st_coordinates(trees), k = 5),
-      unis_nn1 = nn_function(st_coordinates(Houses), 
+           unis_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(uni)), k = 1),
-      parks_nn2 = nn_function(st_coordinates(Houses), 
+           parks_nn2 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(parks)), k = 2),
-      landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
+           landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(landcare_lots)), k = 3),
-      vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
+           vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(Vacant_Lots)), k = 5),
-      dist2bike = min_distances,
-      sale_YYYY.Q = quarter(ymd(Houses$sale_date), type = "year.quarter"),
-      age = 2023 - year_built) %>%
-  filter(sale_price != 0)
+           sale_YYYY.Q = quarter(ymd(Houses$sale_date), type = "year.quarter")) %>% 
+    filter(sale_price != 0)
 
 ```
 
-```{r test data}
-#copy above and set filter at end = 0
+### Correlogram
+```{r correlation matrix, fig.width=10}
+# Select variables of interest and convert them to numeric
+vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% na.omit()
 
-# test <-
+# vars_of_interest <- Houses %>% 
+#   dplyr::select(sale_price, MedHHInc_ACS, MedRent_ACS, HomeOwnRate_ACS, RecyclingRate, exterior_condition, interior_condition, fireplaces, garage_spaces, number_of_bathrooms, number_of_bedrooms, number_stories, total_area, total_livable_area, PopDensity_ACS, PctWhite_ACS, Car2WorkPct_ACS) %>% 
+#   st_set_geometry(NULL) %>% 
+#   glimpse()
+
+ggcorrplot(
+  round(cor(vars_of_interest), 3), 
+  p.mat = cor_pmat(vars_of_interest),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables") 
+
+
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
