@@ -61,9 +61,10 @@ Houses <- st_read("data/studentData.geojson") %>%
 ```{r, message=FALSE}
 ##OA Local files
 # TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
-landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
-  st_transform(crs = coordinate_system)
+# landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
+#   st_transform(crs = coordinate_system)
 
+catchments <- st_read("data/School_Catchment/Catchment_ES_2021-22") %>% st_transform(crs = coordinate_system)
 Redlined <- st_read("data/redlining.geojson")
 Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
 Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
@@ -100,7 +101,8 @@ septa_highspeed <- septa %>%
 ```{r}
 Houses <- Houses %>% 
           st_join(dplyr::select(Recycling_Diversion_Rate, SCORE)) %>% 
-          st_join(dplyr::select(neighborhoods, NAME)) %>% 
+          st_join(dplyr::select(neighborhoods, NAME)) %>%
+          st_join(dplyr::select(catchments, ES_Name)) %>%
           st_join(dplyr::select(tracts2020, MedHHInc, MedRent, HomeOwnRate, PopDensity, PctWhite, PctBach, Car2WorkPct)) %>%
           rename(RecyclingRate = SCORE,
                  Neighborhood = NAME,
