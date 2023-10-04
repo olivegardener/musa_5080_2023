@@ -53,7 +53,7 @@ Houses <- st_read("data/studentData.geojson") %>%
                   fireplaces, garage_spaces, interior_condition, number_of_bathrooms, number_of_bedrooms, number_of_rooms,
                   number_stories, quality_grade, sale_date, total_area, total_livable_area, type_heater, year_built, 
                   building_code_description_new, musaID, geometry) %>% 
-    mutate(age = year_built-2023) %>% 
+    mutate(age = 2023-year_built) %>% 
     dplyr::select(-year_built)
 
 ```
@@ -90,7 +90,7 @@ septa_highspeed <- septa %>%
 
 ```
 
-### Sample Data (for testing)
+### Sample Data (for refining methodolgy)
 ```{r}
 # Sample Data for testing
 # n_sample <- round(nrow(Houses) * 0.1)
@@ -222,14 +222,16 @@ Using tidycensus, split your study area into two groups (perhaps by race or inco
 ```{r stargazer table}
 
 # Convert sf object to data frame
-Houses_df <- as.data.frame(Houses)
+Houses_df <- as.data.frame(Houses) %>%
+  select(-musaID)
 
-# Use stargazer
+parameters <- names(Houses_df)
+
+# option parameter can be used to set order based on index
 stargazer(Houses_df, type = "text", title = "Table 1: Summary Statistics")
 
 
 ```
-### Dave to look into organizing stargazer table by internal characteristics, amenities/public services or spatial structure
 
 ### Correlogram
 ```{r correlation matrix, fig.width=14}
@@ -239,19 +241,35 @@ vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>%
   na.omit()
 
 ggcorrplot(
-  round(cor(vars_of_interest), 3), 
+  round(cor(vars_of_interest), 2), 
   p.mat = cor_pmat(vars_of_interest),
   colors = c("#25CB10", "white", "#FA7800"),
   type="lower",
-  insig = "blank") +  
+  insig = "blank",
+  lab = TRUE,  # Ensure labels are shown
+  lab_size = 2.5  # Adjust the size of the labels
+  ) +  
     labs(title = "Correlation across numeric variables") +
-  theme(
-    title = element_text(size = 6),            # Title text size
-    axis.title = element_text(size = 6),        # Axis title text size
-    axis.text = element_text(size = 6),         # Axis text size
-    legend.title = element_text(size = 6),      # Legend title text size
-    legend.text = element_text(size = 6)        # Legend text size
-  ) 
+  theme(axis.text = element_text(size = 6)) 
+
+```
+
+```{r}
+# Test correlation between two variables
+print("Correlation of total_area and total_livable_area:")
+cor(Houses$total_area, Houses$total_livable_area, use="complete.obs", method="pearson")
+print("Correlation of interior_condition and exterior_condition:")
+cor(Houses$interior_condition, Houses$exterior_condition, use="complete.obs", method="pearson")
+print("Correlation of number_of_bedrooms and number_of_rooms:")
+cor(Houses$number_of_bedrooms, Houses$number_of_rooms, use="complete.obs", method="pearson")
+print("Correlation of number_of_bedrooms and total_livable_area:")
+cor(Houses$number_of_bedrooms, Houses$total_livable_area, use="complete.obs", method="pearson")
+print("Correlation of number_of_rooms and total_livable_area:")
+cor(Houses$number_of_rooms, Houses$total_livable_area, use="complete.obs", method="pearson")
+print("Correlation of RecyclingRate and MedHHInc_ACS:")
+cor(Houses$RecyclingRate, Houses$MedHHInc_ACS, use="complete.obs", method="pearson")
+print("Correlation of RecyclingRate and MedRent_ACS:")
+cor(Houses$RecyclingRate, Houses$MedHHInc_ACS, use="complete.obs", method="pearson")
 
 ```
 
@@ -276,13 +294,10 @@ st_drop_geometry(Houses) %>%
 
 Follow book - map quintile breaks over neighborhoods 
 ```{r map home prices}
-nhoods <- 
-  st_read("data/neighborhoods.geojson") %>%
-  st_transform(coordinate_system)
 
 #book used price per square foot
 ggplot() +
-  geom_sf(data = nhoods, fill = "grey40") +
+  geom_sf(data = neighborhoods, fill = "grey40") +
   geom_sf(data = Houses, aes(colour = q5(sale_price)), 
           show.legend = "point", size = .01) +
   scale_colour_manual(values = palette5,
@@ -296,42 +311,65 @@ ggplot() +
 
 # 3 Interesting Maps (bonus for something extra engaging)
 
-```{r heatmap}
-Houses_age <-
-  Houses %>%
-    na.omit() %>%
-    st_as_sf(coords = c("Long", "Lat"), crs = 4326, agr = "constant") %>%
-    st_transform(coordinate_system) %>%
-    distinct()
-
-ggplot() + geom_sf(data = nhoods, fill = "white") +
-  stat_density2d(data = data.frame(st_coordinates(Houses_age)), 
+```{r heatmap1}
+ggplot() + geom_sf(data = neighborhoods, fill = "white") +
+  stat_density2d(data = data.frame(st_coordinates(trees)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "#E1B93C", high = "#a02300", 
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen", 
                       breaks=c(0.000000003,0.00000003),
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Home Age, Philly") +
+  labs(title = "Density of Trees, Philly") +
   mapTheme()
 
 ```
-+ map for collisions
+
+```{r map2}
+ggplot() + geom_sf(data = neighborhoods, fill = "white") +
+  stat_density2d(data = data.frame(st_coordinates(Vacant_Lots)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "pink", high = "darkred", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Vacant Lots, Philly") +
+  mapTheme()
+```
 + map for distance to bike lanes
-+ map for trees
-+ others?
+```{r map}
+ggplot()+
+geom_sf(data = bike_network)
+
+
+ggplot() + geom_sf(data = neighborhoods, fill = "white") +
+  stat_density2d(data = data.frame(st_coordinates(bike_network)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  geom_sf(data = bike_network, color = "green", alpha = .3)+
+  labs(title = "Density of Bike Network, Philly") +
+  mapTheme()
+```
 
 # Methods
 
 # Table of Results (Training Set)
+### oliver to whittle down to statistically relevant vars
+### remove challenge data, split into training and test sets
 
 ```{r regression training set}
-
 reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
-                          
+
 summary(reg1)
 
 ```
+
+
 
 # Table of Goodness of Fit (Test Set)
 
@@ -345,7 +383,7 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(Houses)) %>% 
+  train(sale_price ~ ., data = st_drop_geometry(Houses) %>% 
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
@@ -453,3 +491,4 @@ st_join(bothRegressions, tracts17) %>%
 ## Generalizability
 
 # Conclusion and Recommendation
+
