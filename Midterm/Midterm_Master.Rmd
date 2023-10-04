@@ -374,17 +374,17 @@ Philly_Data.test <- Philly_Data[-inTrain,]
 
 reg.training <- 
   lm(sale_price ~ ., data = as.data.frame(Philly_Data.training)) %>%
-  dplyr::select(
-                                               exterior_condition, 
-                                               fireplaces, 
-                                               interior_condition, 
-                                               number_of_bathrooms, 
-                                               number_of_bedrooms, 
-                                               number_of_rooms, 
-                                               total_area, 
-                                               total_livable_area, 
-                                               PctBach_ACS, 
-                                               septa_bus_nn5)
+  dplyr::select(sale_price,
+                exterior_condition, 
+                fireplaces, 
+                interior_condition, 
+                number_of_bathrooms, 
+                number_of_bedrooms, 
+                number_of_rooms, 
+                total_area, 
+                total_livable_area, 
+                PctBach_ACS, 
+                septa_bus_nn5)
 
 Philly_Data.test <-
   Philly_Data.test %>%
