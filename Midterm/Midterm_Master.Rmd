@@ -73,7 +73,7 @@ Hospitals <- st_read("data/Hospitals.geojson")
 Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
 Existing_Trails <- st_read("data/Existing_Trails.geojson")
 Traffic_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
-trees <- st_read("data/trees_OA.geojson")
+trees <- st_read("data/trees.geojson") %>% mutate(TREE_DBH = as.factor(TREE_DBH))
 bike_network <- st_read("data/bike_network.geojson")
 parks <- st_read("data/parks.geojson")
 uni <- st_read("data/uni.geojson")
@@ -113,29 +113,35 @@ Houses <- Houses %>%
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
                  Car2WorkPct_ACS = Car2WorkPct) %>% 
+          mutate(PctBach_ACS == PctBach_ACS*100) %>% 
           select(-HomeOwnRate)
 
 ```
 
 ### Compute min dist to trails and bike network
 ```{r}
-## Trails
-# Compute distances
-distances <- st_distance(Houses, Existing_Trails)
-# Compute the minimum distance for each point to the nearest line
-min_distances <- apply(distances, 1, min)
-# Join the minimum distances to the attribute table of the points
-Houses$dist2trail <- min_distances
+# these are proxy values to speed runs, replace with commented section in final version
+Houses$dist2trail <- 5
+Houses$dist2bike <- 5
+Houses$dist2park <- 5
 
-## Bike Network
-distances <- st_distance(Houses, bike_network)
-min_distances <- apply(distances, 1, min)
-Houses$dist2bike <- min_distances
-
-# Parks
-distances <- st_distance(Houses, parks)
-min_distances <- apply(distances, 1, min)
-Houses$dist2park <- min_distances
+# ## Trails
+# # Compute distances
+# distances <- st_distance(Houses, Existing_Trails)
+# # Compute the minimum distance for each point to the nearest line
+# min_distances <- apply(distances, 1, min)
+# # Join the minimum distances to the attribute table of the points
+# Houses$dist2trail <- min_distances
+# 
+# ## Bike Network
+# distances <- st_distance(Houses, bike_network)
+# min_distances <- apply(distances, 1, min)
+# Houses$dist2bike <- min_distances
+# 
+# # Parks
+# distances <- st_distance(Houses, parks)
+# min_distances <- apply(distances, 1, min)
+# Houses$dist2park <- min_distances
 
 ```
 
@@ -253,7 +259,7 @@ ggplot() +
 ```{r heatmap1}
 ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   stat_density2d(data = data.frame(st_coordinates(trees)), 
-                 aes(x=X, y=Y, weight = trees$TREE_DBH, fill = ..level.., alpha = ..level..),
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
   scale_fill_gradient(low = "lightgreen", high = "darkgreen", 
                       breaks=c(0.000000003,0.00000003),
@@ -278,10 +284,6 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
 ```
 + map for distance to bike lanes
 ```{r map}
-ggplot()+
-geom_sf(data = bike_network)
-
-
 ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   stat_density2d(data = data.frame(st_coordinates(bike_network)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
@@ -293,13 +295,13 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   geom_sf(data = bike_network, color = "green", alpha = .3)+
   labs(title = "Density of Bike Network, Philly") +
   mapTheme()
+
 ```
 
 
 # Methods
 
 # Table of Results (Training Set)
-### oliver to whittle down to statistically relevant vars
 ### remove challenge data, split into training and test sets
 
 ```{r regression training set}
