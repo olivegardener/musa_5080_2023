@@ -327,9 +327,17 @@ boston.test <-
   filter(SalePrice < 5000000) 
 
 ```
-There are a lot of variables in this model that appear to have low significance. 
 
-### Correlogram
+Let's try making a model with all of our variables, to start.
+
+```{r model 1}
+Houses_Clean <- dplyr::select(Houses, -musaID)
+
+reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses_Clean), is.numeric))
+summary(reg1)
+
+```
+Let's try narrowing down the variables based on a correlogram
 ```{r correlation matrix, fig.width=14}
 # Select variables of interest and convert them to numeric
 vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
@@ -349,16 +357,30 @@ ggcorrplot(
   theme(axis.text = element_text(size = 6)) 
 
 ```
-From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables.
+From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables and make a model with this smaller set.
 
-```{r}
-Houses <- Houses %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
+```{r model 2}
+Houses2 <- Houses_Clean %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
+
+reg2 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses2), is.numeric))
+summary(reg2)
 
 ```
+Our R-squared variable only decreased by 0.01. Not bad at all, given the number of variables removed. There are a lot of variables in this model that appear to have low significance, let's remove them.
 
-```{r regression training set}
-reg2 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
-summary(reg2)
+
+```{r model 3}
+Houses3 <- Houses2 %>% dplyr::select(-garage_spaces, -MedHHInc_ACS, -MedRent_ACS, -PctWhite_ACS, -dist2bike, -collisions_nn3, -vacant_lots_nn5)
+
+reg3 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses3), is.numeric))
+summary(reg3)
+
+```
+```{r model 4}
+Houses4 <- Houses3 %>% dplyr::select(-RecyclingRate)
+
+reg4 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses4), is.numeric))
+summary(reg4)
 
 ```
 
