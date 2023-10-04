@@ -193,6 +193,28 @@ palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
 
 Deliverables
 
+Instructions
+Split the ‘toPredict’ == “MODELLING” into a training and test set. Provide a polished table of your training set lm summary results (coefficients, R2 etc).
+
+Provide a polished table of mean absolute error and MAPE for a single test set. Check out the “kable” function for markdown to create nice tables.
+
+Provide the results of your cross-validation tests. This includes mean and standard deviation MAE. Do 100 folds and plot your cross-validation MAE as a histogram. Is your model generalizable to new data?
+
+Plot predicted prices as a function of observed prices
+
+Provide a map of your residuals for your test set. Include a Moran’s I test and a plot of the spatial lag in errors.
+
+Provide a map of your predicted values for where ‘toPredict’ is both “MODELLING” and “CHALLENGE”.
+
+Using the test set predictions, provide a map of mean absolute percentage error (MAPE) by neighborhood.
+
+Provide a scatterplot plot of MAPE by neighborhood as a function of mean price by neighborhood.
+
+Using tidycensus, split your study area into two groups (perhaps by race or income) and test your model’s generalizability. Is your model generalizable?
+
+
+
+
 # Introduction
 
 # Summary Statistics
@@ -306,13 +328,8 @@ ggplot() + geom_sf(data = nhoods, fill = "white") +
 ```{r regression training set}
 
 reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
-                                 # dplyr::select(SalePrice, LivingArea, Style, 
-                                 #               GROSS_AREA, R_TOTAL_RM, NUM_FLOORS,
-                                 #               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
-                                 #               R_KITCH, R_AC, R_FPLACE))
+                          
 summary(reg1)
-# Check the levels of factor variables
-lapply(Houses, function(x) if(is.factor(x)) levels(x))
 
 ```
 
@@ -328,11 +345,7 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(training) %>% 
-                                dplyr::select(sale_price, 
-                                number_stories, 
-                                number_of_bathrooms, 
-                                number_of_bedrooms), 
+  train(sale_price ~ ., data = st_drop_geometry(Houses)) %>% 
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
