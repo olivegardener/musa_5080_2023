@@ -177,8 +177,8 @@ Houses <- Houses %>%
                               st_coordinates(Traffic_Collisions), k = 3), #data old, keep?
            unis_nn1 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(uni)), k = 1),
-           landcare_lots_nn3 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(landcare_lots)), k = 3),
+           landcare_lots_nn5 = nn_function(st_coordinates(Houses), 
+                              st_coordinates(st_centroid(landcare_lots)), k = 5),
            vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
                               st_coordinates(st_centroid(Vacant_Lots)), k = 5)) %>% 
     filter(sale_price != 0)
@@ -192,28 +192,6 @@ palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
 ```
 
 Deliverables
-
-Instructions
-Split the ‘toPredict’ == “MODELLING” into a training and test set. Provide a polished table of your training set lm summary results (coefficients, R2 etc).
-
-Provide a polished table of mean absolute error and MAPE for a single test set. Check out the “kable” function for markdown to create nice tables.
-
-Provide the results of your cross-validation tests. This includes mean and standard deviation MAE. Do 100 folds and plot your cross-validation MAE as a histogram. Is your model generalizable to new data?
-
-Plot predicted prices as a function of observed prices
-
-Provide a map of your residuals for your test set. Include a Moran’s I test and a plot of the spatial lag in errors.
-
-Provide a map of your predicted values for where ‘toPredict’ is both “MODELLING” and “CHALLENGE”.
-
-Using the test set predictions, provide a map of mean absolute percentage error (MAPE) by neighborhood.
-
-Provide a scatterplot plot of MAPE by neighborhood as a function of mean price by neighborhood.
-
-Using tidycensus, split your study area into two groups (perhaps by race or income) and test your model’s generalizability. Is your model generalizable?
-
-
-
 
 # Introduction
 
@@ -243,7 +221,7 @@ vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>%
 ggcorrplot(
   round(cor(vars_of_interest), 2), 
   p.mat = cor_pmat(vars_of_interest),
-  colors = c("#25CB10", "white", "#FA7800"),
+  colors = c("#FA7800", "white", "#25CB10"),
   type="lower",
   insig = "blank",
   lab = TRUE,  # Ensure labels are shown
@@ -253,23 +231,10 @@ ggcorrplot(
   theme(axis.text = element_text(size = 6)) 
 
 ```
+From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables.
 
 ```{r}
-# Test correlation between two variables
-print("Correlation of total_area and total_livable_area:")
-cor(Houses$total_area, Houses$total_livable_area, use="complete.obs", method="pearson")
-print("Correlation of interior_condition and exterior_condition:")
-cor(Houses$interior_condition, Houses$exterior_condition, use="complete.obs", method="pearson")
-print("Correlation of number_of_bedrooms and number_of_rooms:")
-cor(Houses$number_of_bedrooms, Houses$number_of_rooms, use="complete.obs", method="pearson")
-print("Correlation of number_of_bedrooms and total_livable_area:")
-cor(Houses$number_of_bedrooms, Houses$total_livable_area, use="complete.obs", method="pearson")
-print("Correlation of number_of_rooms and total_livable_area:")
-cor(Houses$number_of_rooms, Houses$total_livable_area, use="complete.obs", method="pearson")
-print("Correlation of RecyclingRate and MedHHInc_ACS:")
-cor(Houses$RecyclingRate, Houses$MedHHInc_ACS, use="complete.obs", method="pearson")
-print("Correlation of RecyclingRate and MedRent_ACS:")
-cor(Houses$RecyclingRate, Houses$MedHHInc_ACS, use="complete.obs", method="pearson")
+Houses <- Houses %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
 
 ```
 
@@ -364,7 +329,6 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
 
 ```{r regression training set}
 reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
-
 summary(reg1)
 
 ```
@@ -383,7 +347,11 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(Houses) %>% 
+  train(sale_price ~ ., data = st_drop_geometry(training) %>% 
+                                dplyr::select(sale_price, 
+                                number_stories, 
+                                number_of_bathrooms, 
+                                number_of_bedrooms), 
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
