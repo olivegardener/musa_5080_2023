@@ -211,32 +211,6 @@ stargazer(Houses_df, type = "text", title = "Table 1: Summary Statistics")
 
 ```
 
-### Correlogram
-```{r correlation matrix, fig.width=14}
-# Select variables of interest and convert them to numeric
-vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
-  select(-musaID) %>% 
-  na.omit()
-
-ggcorrplot(
-  round(cor(vars_of_interest), 2), 
-  p.mat = cor_pmat(vars_of_interest),
-  colors = c("#FA7800", "white", "#25CB10"),
-  type="lower",
-  insig = "blank",
-  lab = TRUE,  # Ensure labels are shown
-  lab_size = 2.5  # Adjust the size of the labels
-  ) +  
-    labs(title = "Correlation across numeric variables") +
-  theme(axis.text = element_text(size = 6)) 
-
-```
-From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables.
-
-```{r}
-Houses <- Houses %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
-
-```
 
 # Home Price Scatterplots
 Example from book for facetwrap scatterplots
@@ -321,6 +295,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   mapTheme()
 ```
 
+
 # Methods
 
 # Table of Results (Training Set)
@@ -332,8 +307,40 @@ reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric
 summary(reg1)
 
 ```
+There are a lot of variables in this model that appear to have low significance. 
 
+### Correlogram
+```{r correlation matrix, fig.width=14}
+# Select variables of interest and convert them to numeric
+vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
+  select(-musaID) %>% 
+  na.omit()
 
+ggcorrplot(
+  round(cor(vars_of_interest), 2), 
+  p.mat = cor_pmat(vars_of_interest),
+  colors = c("#FA7800", "white", "#25CB10"),
+  type="lower",
+  insig = "blank",
+  lab = TRUE,  # Ensure labels are shown
+  lab_size = 2.5  # Adjust the size of the labels
+  ) +  
+    labs(title = "Correlation across numeric variables") +
+  theme(axis.text = element_text(size = 6)) 
+
+```
+From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables.
+
+```{r}
+Houses <- Houses %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
+
+```
+
+```{r regression training set}
+reg2 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses), is.numeric))
+summary(reg2)
+
+```
 
 # Table of Goodness of Fit (Test Set)
 
