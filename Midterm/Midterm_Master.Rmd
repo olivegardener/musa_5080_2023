@@ -298,35 +298,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
 
 # Methods
 
-# Table of Results (Training Set)
-### oliver to whittle down to statistically relevant vars
-### remove challenge data, split into training and test sets
 
-```{r regression training set}
-inTrain <- createDataPartition(
-              y = paste(boston.sf$Name, boston.sf$NUM_FLOORS.cat, 
-                        boston.sf$Style, boston.sf$R_AC), 
-              p = .60, list = FALSE)
-Houses.training <- boston.sf[inTrain,] 
-Houses.test <- boston.sf[-inTrain,]  
- 
-reg.training <- 
-  lm(SalePrice ~ ., data = as.data.frame(boston.training) %>% 
-                             dplyr::select(SalePrice, LivingArea, Style, 
-                                           GROSS_AREA, NUM_FLOORS.cat,
-                                           R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
-                                           R_KITCH, R_AC, R_FPLACE, crimes.Buffer))
-
-boston.test <-
-  boston.test %>%
-  mutate(Regression = "Baseline Regression",
-         SalePrice.Predict = predict(reg.training, boston.test),
-         SalePrice.Error = SalePrice.Predict - SalePrice,
-         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
-         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
-  filter(SalePrice < 5000000) 
-
-```
 
 Let's try making a model with all of our variables, to start.
 
@@ -385,6 +357,44 @@ summary(reg4)
 ```
 ```{r}
 Philly_Data <- Houses4
+```
+
+# Table of Results (Training Set)
+### oliver to whittle down to statistically relevant vars
+### remove challenge data, split into training and test sets
+
+```{r regression training set}
+inTrain <- createDataPartition(
+              y = paste(Philly_Data$Neighborhood),
+              p = .60, list = FALSE)
+Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,] )
+Philly_Data.test <- Philly_Data[-inTrain,]  
+ 
+
+
+reg.training <- 
+  lm(sale_price ~ ., data = as.data.frame(Philly_Data.training)) %>%
+  dplyr::select(
+                                               exterior_condition, 
+                                               fireplaces, 
+                                               interior_condition, 
+                                               number_of_bathrooms, 
+                                               number_of_bedrooms, 
+                                               number_of_rooms, 
+                                               total_area, 
+                                               total_livable_area, 
+                                               PctBach_ACS, 
+                                               septa_bus_nn5)
+
+Philly_Data.test <-
+  Philly_Data.test %>%
+  mutate(Regression = "Baseline Regression",
+         SalePrice.Predict = predict(reg.training, boston.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
+  filter(SalePrice < 5000000) 
+
 ```
 
 # Table of Goodness of Fit (Test Set)
