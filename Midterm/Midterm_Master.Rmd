@@ -383,6 +383,9 @@ reg4 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses4), is.numeri
 summary(reg4)
 
 ```
+```{r}
+Philly_Data <- Houses4
+```
 
 # Table of Goodness of Fit (Test Set)
 
