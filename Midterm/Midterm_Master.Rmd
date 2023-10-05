@@ -400,10 +400,10 @@ reg.training <-
 Philly_Data.test <-
   Philly_Data.test %>%
   mutate(Regression = "Baseline Regression",
-         SalePrice.Predict = predict(reg.training, Philly_Data.test),
-         SalePrice.Error = SalePrice.Predict - sale_price,
-         SalePrice.AbsError = abs(SalePrice.Predict - sale_price),
-         SalePrice.APE = (abs(SalePrice.Predict - sale_price)) / SalePrice.Predict)%>%
+         sale_price.Predict = predict(reg.training, Philly_Data.test),
+         sale_price.Error = sale_price.Predict - sale_price,
+         sale_price.AbsError = abs(sale_price.Predict - sale_price),
+         sale_price.APE = (abs(sale_price.Predict - sale_price)) / sale_price.Predict)%>%
   filter(sale_price < 5000000) 
 
 ```
@@ -420,11 +420,18 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(training) %>% 
-                                dplyr::select(sale_price, 
-                                number_stories, 
-                                number_of_bathrooms, 
-                                number_of_bedrooms), 
+  train(sale_price ~ ., data = st_drop_geometry(Philly_Data.training) %>% 
+                                dplyr::select(sale_price,
+                                              exterior_condition, 
+                                              fireplaces, 
+                                              interior_condition, 
+                                              number_of_bathrooms, 
+                                              number_of_bedrooms, 
+                                              number_of_rooms, 
+                                              total_area, 
+                                              total_livable_area, 
+                                              PctBach_ACS, 
+                                              septa_bus_nn5),
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
@@ -436,15 +443,15 @@ reg.cv
 Example from book
 
 ```{r pred and obs}
-bothRegressions %>%
-  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
-    ggplot(aes(SalePrice, SalePrice.Predict)) +
+
+Philly_Data.test %>%
+  dplyr::select(sale_price.Predict, sale_price, Regression) %>%
+    ggplot(aes(sale_price, sale_price.Predict)) +
   geom_point() +
-  stat_smooth(aes(SalePrice, SalePrice), 
+  stat_smooth(aes(sale_price, sale_price), 
              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
-  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+  stat_smooth(aes(sale_price.Predict, sale_price), 
               method = "lm", se = FALSE, size = 1, colour="#25CB10") +
-  facet_wrap(~Regression) +
   labs(title="Predicted sale price as a function of observed price",
        subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
   plotTheme()
