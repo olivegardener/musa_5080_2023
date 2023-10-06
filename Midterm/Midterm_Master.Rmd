@@ -41,6 +41,8 @@ library(stargazer)
 # Coordinate System
 coordinate_system <- 2272
 
+options(scipen = 999)
+
 Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 
 ```
@@ -335,6 +337,8 @@ Houses2 <- Houses_Clean %>% dplyr::select(-number_stories, -age, -PopDensity_ACS
 reg2 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses2), is.numeric))
 summary(reg2)
 
+
+coefficients(reg2)
 ```
 Our R-squared variable only decreased by 0.01. Not bad at all, given the number of variables removed. There are a lot of variables in this model that appear to have low significance, let's remove them.
 
@@ -349,13 +353,52 @@ summary(reg3)
 
 ```{r model 4}
 Houses4 <- Houses3 %>% dplyr::select(-RecyclingRate)
-
-reg4 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses4), is.numeric))
-summary(reg4)
-
 ```
-```{r}
-Philly_Data <- Houses4
+
+
+We weren't taking into account spatial adjustments - I think the whittling down threw off the original regressions. Following chunk creates a dataset of only variables we care about and includes redlining - was having trouble with the factor level with neighborhoods and catchments.
+```{r regression final}
+
+Houses_Clean %>%
+  mutate(PctBach_ACS = PctBach_ACS*100,
+         Houses_Clean$exterior_condition[is.na(Houses_Clean$exterior_condition)]<- median(Houses_Clean$exterior_condition,na.rm = TRUE),
+         Houses_Clean$fireplaces[is.na(Houses_Clean$fireplaces)]<- median(Houses_Clean$fireplaces,na.rm = TRUE),
+         Houses_Clean$interior_condition[is.na(Houses_Clean$interior_condition)]<- median(Houses_Clean$interior_condition,na.rm = TRUE),
+         Houses_Clean$number_of_bathrooms[is.na(Houses_Clean$number_of_bathrooms)]<- median(Houses_Clean$number_of_bathrooms,na.rm = TRUE),
+         Houses_Clean$number_of_bedrooms[is.na(Houses_Clean$number_of_bedrooms)]<- median(Houses_Clean$number_of_bedrooms,na.rm = TRUE),
+         Houses_Clean$total_area[is.na(Houses_Clean$total_area)]<- median(Houses_Clean$total_area,na.rm = TRUE),
+         Houses_Clean$total_livable_area[is.na(Houses_Clean$total_livable_area)]<- median(Houses_Clean$total_livable_area,na.rm = TRUE),
+         Houses_Clean$PctBach_ACS[is.na(Houses_Clean$PctBach_ACS)]<- median(Houses_Clean$PctBach_ACS,na.rm = TRUE),
+         Houses_Clean$septa_bus_nn5[is.na(Houses_Clean$septa_bus_nn5)]<- median(Houses_Clean$septa_bus_nn5,na.rm = TRUE),
+         Houses_Clean$holc_grade[is.na(Houses_Clean$holc_grade)]<- "no grade")
+        )
+
+
+
+
+regression_data <- Houses_Clean %>% dplyr::select(
+                                                  sale_price,
+                                                  exterior_condition, 
+                                                  fireplaces, 
+                                                  interior_condition, 
+                                                  number_of_bathrooms, 
+                                                  number_of_bedrooms, 
+                                                  #number_of_rooms, 
+                                                  total_area, 
+                                                  total_livable_area, 
+                                                  PctBach_ACS, 
+                                                  septa_bus_nn5, 
+                                                  #Neighborhood, 
+                                                  holc_grade, 
+                                                  #ES_Name
+                                                  )
+
+regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(regression_data)))
+
+summary(regression)
+
+
+Philly_Data <- regression_data
 ```
 
 # Table of Results (Training Set)
@@ -363,52 +406,67 @@ Philly_Data <- Houses4
 
 ```{r regression training set}
 inTrain <- createDataPartition(
-              y = paste(Philly_Data$Neighborhood),
+              y = paste(Philly_Data$holc_grade),
               p = .60, list = FALSE)
-Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,] )
+Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
 Philly_Data.test <- Philly_Data[-inTrain,]  
  
 Philly_Data.training <- Philly_Data.training %>%
-  dplyr::select(sale_price,
-                exterior_condition, 
-                fireplaces, 
-                interior_condition, 
-                number_of_bathrooms, 
-                number_of_bedrooms, 
-                number_of_rooms, 
-                total_area, 
-                total_livable_area, 
-                PctBach_ACS, 
-                septa_bus_nn5) 
+                                    dplyr::select(sale_price,
+                                                  exterior_condition, 
+                                                  fireplaces, 
+                                                  interior_condition, 
+                                                  number_of_bathrooms, 
+                                                  number_of_bedrooms, 
+                                                  #number_of_rooms, 
+                                                  total_area, 
+                                                  total_livable_area, 
+                                                  PctBach_ACS, 
+                                                  septa_bus_nn5, 
+                                                  #Neighborhood, 
+                                                  holc_grade, 
+                                                  #ES_Name
+                                                  ) 
 
 Philly_Data.test <- Philly_Data.test %>%
-  dplyr::select(sale_price,
-                exterior_condition, 
-                fireplaces, 
-                interior_condition, 
-                number_of_bathrooms, 
-                number_of_bedrooms, 
-                number_of_rooms, 
-                total_area, 
-                total_livable_area, 
-                PctBach_ACS, 
-                septa_bus_nn5)
+                                    dplyr::select(sale_price,
+                                                  exterior_condition, 
+                                                  fireplaces, 
+                                                  interior_condition, 
+                                                  number_of_bathrooms, 
+                                                  number_of_bedrooms, 
+                                                  #number_of_rooms, 
+                                                  total_area, 
+                                                  total_livable_area, 
+                                                  PctBach_ACS, 
+                                                  septa_bus_nn5, 
+                                                  #Neighborhood, 
+                                                  holc_grade, 
+                                                  #ES_Name
+                                                  )
 
 reg.training <- 
   lm(sale_price ~ ., data = as.data.frame(Philly_Data.training))
 
+```
+
+# Table of Goodness of Fit (Test Set)
+
+```{r goodness of fit}
+
 Philly_Data.test <-
   Philly_Data.test %>%
-  mutate(Regression = "Baseline Regression",
+  mutate(Regression = "Regression",
          sale_price.Predict = predict(reg.training, Philly_Data.test),
          sale_price.Error = sale_price.Predict - sale_price,
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
          sale_price.APE = (abs(sale_price.Predict - sale_price)) / sale_price.Predict)%>%
   filter(sale_price < 5000000) 
 
+print(Philly_Data.test)
+
 ```
 
-# Table of Goodness of Fit (Test Set)
 
 # CV Results
 
@@ -427,11 +485,12 @@ reg.cv <-
                                               interior_condition, 
                                               number_of_bathrooms, 
                                               number_of_bedrooms, 
-                                              number_of_rooms, 
+                                              #number_of_rooms, 
                                               total_area, 
                                               total_livable_area, 
                                               PctBach_ACS, 
-                                              septa_bus_nn5),
+                                              septa_bus_nn5,
+                                              holc_grade),
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
@@ -440,7 +499,7 @@ reg.cv
 
 # Pred vs Obs Scatterplot
 
-Example from book
+Example from book - edit wording
 
 ```{r pred and obs}
 
@@ -460,18 +519,56 @@ Philly_Data.test %>%
 
 # Residuals Map w/ Moran's I
 
+
+```{r moran map}
+
+coords.test <-  st_coordinates(Philly_Data.test) 
+
+neighborList.test <- knn2nb(knearneigh(coords.test, 5))
+
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+ 
+Philly_Data.test %>% 
+  mutate(lagPriceError = lag.listw(spatialWeights.test, sale_price.Error)) %>%
+  ggplot()+
+  geom_point(aes(x =lagPriceError, y =sale_price.Error))
+
+
+moranTest <- moran.mc(Philly_Data.test$sale_price.Error, 
+                      spatialWeights.test, nsim = 999)
+
+
+
+```
 # Predicted Map (Test Set)
+
+Is this kind of map right?
+
+```{r pred map}
+
+ggplot() +
+  geom_sf(data = neighborhoods, fill = "grey40") +
+  geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price)), 
+          show.legend = "point", size = .01) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(Philly_Data.test,"sale_price"),
+                   name="Quintile\nBreaks") +
+  labs(title="Sale Price, Philly") +
+  mapTheme()
+
+```
+
 
 # MAPE map by neighborhood
 
 Example from book
 
 ```{r mape map}
-st_drop_geometry(bothRegressions) %>%
-  group_by(Regression, Name) %>%
-  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+Philly_Data.test %>%
+  group_by(Regression, holc_grade) %>%
+  summarize(mean.MAPE = mean(sale_price.APE, na.rm = T)) %>%
   ungroup() %>% 
-  left_join(nhoods) %>%
+  left_join(neighborhoods) %>%
     st_sf() %>%
     ggplot() + 
       geom_sf(aes(fill = mean.MAPE)) +
@@ -495,8 +592,8 @@ Example from book
 ```{r tracts}
 tracts17 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E","B06011_001"), 
-          year = 2017, state=25, county=025, geometry=T, output = "wide") %>%
-  st_transform('ESRI:102286')  %>%
+          year = 2017, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
+  st_transform(crs=2272)  %>%
   rename(TotalPop = B01001_001E,
          NumberWhites = B01001A_001E,
          Median_Income = B06011_001E) %>%
@@ -515,18 +612,18 @@ grid.arrange(ncol = 2,
     mapTheme() + theme(legend.position="bottom"))
 
 #MAPE for both regressions by race
-st_join(bothRegressions, tracts17) %>% 
+st_join(Philly_Data.test, tracts17) %>% 
   group_by(Regression, raceContext) %>%
-  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(raceContext, mean.MAPE) %>%
   kable(caption = "Test set MAPE by neighborhood racial context")
 
 #MAPE for both regressions by income
-st_join(bothRegressions, tracts17) %>% 
+st_join(Philly_Data.test, tracts17) %>% 
   filter(!is.na(incomeContext)) %>%
   group_by(Regression, incomeContext) %>%
-  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(incomeContext, mean.MAPE) %>%
   kable(caption = "Test set MAPE by neighborhood income context")
