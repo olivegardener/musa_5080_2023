@@ -371,7 +371,6 @@ Houses_Clean %>%
          Houses_Clean$PctBach_ACS[is.na(Houses_Clean$PctBach_ACS)]<- median(Houses_Clean$PctBach_ACS,na.rm = TRUE),
          Houses_Clean$septa_bus_nn5[is.na(Houses_Clean$septa_bus_nn5)]<- median(Houses_Clean$septa_bus_nn5,na.rm = TRUE),
          Houses_Clean$holc_grade[is.na(Houses_Clean$holc_grade)]<- "no grade")
-        )
 
 
 
@@ -388,7 +387,7 @@ regression_data <- Houses_Clean %>% dplyr::select(
                                                   total_livable_area, 
                                                   PctBach_ACS, 
                                                   septa_bus_nn5, 
-                                                  #Neighborhood, 
+                                                  Neighborhood, 
                                                   holc_grade, 
                                                   #ES_Name
                                                   )
@@ -423,7 +422,7 @@ Philly_Data.training <- Philly_Data.training %>%
                                                   total_livable_area, 
                                                   PctBach_ACS, 
                                                   septa_bus_nn5, 
-                                                  #Neighborhood, 
+                                                  Neighborhood, 
                                                   holc_grade, 
                                                   #ES_Name
                                                   ) 
@@ -440,7 +439,7 @@ Philly_Data.test <- Philly_Data.test %>%
                                                   total_livable_area, 
                                                   PctBach_ACS, 
                                                   septa_bus_nn5, 
-                                                  #Neighborhood, 
+                                                  Neighborhood, 
                                                   holc_grade, 
                                                   #ES_Name
                                                   )
@@ -461,9 +460,12 @@ Philly_Data.test <-
          sale_price.Error = sale_price.Predict - sale_price,
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
          sale_price.APE = (abs(sale_price.Predict - sale_price)) / sale_price.Predict)%>%
-  filter(sale_price < 5000000) 
-
-print(Philly_Data.test)
+  filter(sale_price < 5000000)  %>%
+  na.omit() #should NA omit be here?
+ 
+st_drop_geometry(Philly_Data.test) %>%
+  select(sale_price.Predict, sale_price.Error, sale_price.AbsError, sale_price.APE) %>%
+  kbl()
 
 ```
 
@@ -520,6 +522,8 @@ Philly_Data.test %>%
 # Residuals Map w/ Moran's I
 
 
+
+need to make sure there's no NA data to run this correctly
 ```{r moran map}
 
 coords.test <-  st_coordinates(Philly_Data.test) 
@@ -568,12 +572,12 @@ Philly_Data.test %>%
   group_by(Regression, holc_grade) %>%
   summarize(mean.MAPE = mean(sale_price.APE, na.rm = T)) %>%
   ungroup() %>% 
-  left_join(neighborhoods) %>%
+  st_join(neighborhoods) %>%
     st_sf() %>%
     ggplot() + 
       geom_sf(aes(fill = mean.MAPE)) +
-      geom_sf(data = bothRegressions, colour = "black", size = .5) +
-      facet_wrap(~Regression) +
+      geom_sf(data = regression_data, colour = "black", size = .5) +
+      facet_wrap(~Regression) + 
       scale_fill_gradient(low = palette5[1], high = palette5[5],
                           name = "MAPE") +
       labs(title = "Mean test set MAPE by neighborhood") +
