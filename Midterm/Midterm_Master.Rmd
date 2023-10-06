@@ -419,14 +419,10 @@ Philly_Data.training <- Philly_Data.training %>%
                                                   total_livable_area, 
                                                   PctBach_ACS, 
                                                   septa_bus_nn5, 
-<<<<<<< Updated upstream
                                                   #Neighborhood, 
-                                                  #holc_grade,
-                                                  dist
-=======
+                                                  dist,
                                                   # Neighborhood, 
-                                                  holc_grade, 
->>>>>>> Stashed changes
+                                                  # holc_grade, 
                                                   #ES_Name
                                                   ) 
 
@@ -442,14 +438,10 @@ Philly_Data.test <- Philly_Data.test %>%
                                                   total_livable_area, 
                                                   PctBach_ACS, 
                                                   septa_bus_nn5, 
-<<<<<<< Updated upstream
                                                   #Neighborhood, 
-                                                  #holc_grade, 
-                                                  dist
-=======
+                                                  dist,
                                                   # Neighborhood, 
-                                                  holc_grade, 
->>>>>>> Stashed changes
+                                                  # holc_grade, 
                                                   #ES_Name
                                                   )
 
@@ -612,29 +604,6 @@ MAPE.Map <- ggplot() +
   mapTheme()
 
 MAPE.Map
-
-
-Philly_Data.test %>%
-  group_by(Regression, Neighborhood) %>%
-  summarize(mean.MAPE = mean(sale_price.APE, na.rm = T)) %>%
-  ungroup() %>% 
-  st_join(neighborhoods) %>%
-    st_sf() %>%
-    ggplot() + 
-      geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-      geom_sf(data = regression_data, colour = "black", size = .1) +
-      facet_wrap(~Regression) + 
-      scale_fill_gradient(low = palette5[1], high = palette5[5],
-                          name = "MAPE") +
-      labs(title = "Mean test set MAPE by neighborhood") +
-      mapTheme()
-
-ggplot() + 
-  geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-  geom_point(data = Philly_Data.test, aes(x = lon, y = lat, color = black, size = .1)) +
-  scale_color_gradient(low = "blue", high = "red", name = "MAPE") +
-  labs(title = "Mean test set MAPE by neighborhood") +
-  theme_minimal()
 
 
 
