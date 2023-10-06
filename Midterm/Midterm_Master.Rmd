@@ -362,21 +362,12 @@ Houses4 <- Houses3 %>% dplyr::select(-RecyclingRate)
 We weren't taking into account spatial adjustments - I think the whittling down threw off the original regressions. Following chunk creates a dataset of only variables we care about and includes redlining - was having trouble with the factor level with neighborhoods and catchments.
 ```{r regression final}
 
-Houses_Clean %>%
+Houses_Clean2 <- Houses_Clean %>%
   mutate(PctBach_ACS = PctBach_ACS*100,
-         exterior_condition2 = replace(Houses_Clean$exterior_condition, is.na(Houses_Clean$exterior_condition), 100000),
-         Houses_Clean$fireplaces[is.na(Houses_Clean$fireplaces)]<- median(Houses_Clean$fireplaces,na.rm = TRUE),
-         Houses_Clean$interior_condition[is.na(Houses_Clean$interior_condition)]<- median(Houses_Clean$interior_condition,na.rm = TRUE),
-         Houses_Clean$number_of_bathrooms[is.na(Houses_Clean$number_of_bathrooms)]<- median(Houses_Clean$number_of_bathrooms,na.rm = TRUE),
-         Houses_Clean$number_of_bedrooms[is.na(Houses_Clean$number_of_bedrooms)]<- median(Houses_Clean$number_of_bedrooms,na.rm = TRUE),
-         Houses_Clean$total_area[is.na(Houses_Clean$total_area)]<- median(Houses_Clean$total_area,na.rm = TRUE),
-         Houses_Clean$total_livable_area[is.na(Houses_Clean$total_livable_area)]<- median(Houses_Clean$total_livable_area,na.rm = TRUE),
-         Houses_Clean$PctBach_ACS[is.na(Houses_Clean$PctBach_ACS)]<- median(Houses_Clean$PctBach_ACS,na.rm = TRUE),
-         Houses_Clean$septa_bus_nn5[is.na(Houses_Clean$septa_bus_nn5)]<- median(Houses_Clean$septa_bus_nn5,na.rm = TRUE),
-         Houses_Clean$holc_grade[is.na(Houses_Clean$holc_grade)]<- "no grade",
-          Houses_Clean$dist[is.na(Houses_Clean$dist)]<- "no district")
+         exterior_condition = replace(Houses_Clean$exterior_condition, is.na(Houses_Clean$exterior_condition), median(Houses_Clean$exterior_condition, na.rm = TRUE)))
+       
          
-summary(Houses_Clean)
+summary(Houses_Clean2)
 
 
 
