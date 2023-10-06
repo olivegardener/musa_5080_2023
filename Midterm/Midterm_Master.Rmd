@@ -365,10 +365,6 @@ We weren't taking into account spatial adjustments - I think the whittling down 
 Houses_Clean2 <- Houses_Clean %>%
   mutate(PctBach_ACS = PctBach_ACS*100,
          exterior_condition = replace(Houses_Clean$exterior_condition, is.na(Houses_Clean$exterior_condition), median(Houses_Clean$exterior_condition, na.rm = TRUE)))
-       
-         
-summary(Houses_Clean2)
-
 
 
 regression_data <- Houses_Clean %>% dplyr::select(
@@ -604,11 +600,6 @@ MAPE.Map <- ggplot() +
   mapTheme()
 
 MAPE.Map
-
-
-
-
-
 
 ```
 
