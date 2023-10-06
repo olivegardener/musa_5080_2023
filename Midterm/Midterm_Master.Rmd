@@ -37,6 +37,7 @@ library(ggpubr)    # plotting R^2 value on ggplot point scatter
 library(broom.mixed) # needed for effects plots
 library(lubridate)
 library(stargazer)
+library(purrr)
 
 # Coordinate System
 coordinate_system <- 2272
@@ -56,7 +57,8 @@ Houses <- st_read("data/studentData.geojson") %>%
                   number_stories, quality_grade, sale_date, total_area, total_livable_area, type_heater, year_built, 
                   building_code_description_new, musaID, geometry) %>% 
     mutate(age = 2023-year_built) %>% 
-    dplyr::select(-year_built)
+    dplyr::select(-year_built) %>%
+  filter(sale_price < quantile(sale_price, 0.95))
 
 ```
 
@@ -118,7 +120,7 @@ Houses <- Houses %>%
                  PctBach_ACS = PctBach,
                  Car2WorkPct_ACS = Car2WorkPct,
                  dist = DIST_NAME) %>% 
-          mutate(PctBach_ACS == PctBach_ACS*100) %>% 
+          mutate(PctBach_ACS = PctBach_ACS*100) %>% 
           select(-HomeOwnRate)
 
 ```
@@ -230,7 +232,7 @@ Example from book for facetwrap scatterplots
 
 st_drop_geometry(Houses) %>% 
   select(sale_price, vacant_lots_nn5, dist2bike, septa_bus_nn5, collisions_nn3) %>%
-  filter(sale_price <= quantile(sale_price, 0.9)) %>%
+  filter(sale_price <= quantile(sale_price, 0.95)) %>%
   gather(Variable, Value, -sale_price) %>% 
    ggplot(aes(log(Value), sale_price)) +
      geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -286,6 +288,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
   labs(title = "Density of Vacant Lots, Philly") +
   mapTheme()
+
 ```
 + map for distance to bike lanes
 ```{r map}
@@ -362,9 +365,16 @@ Houses4 <- Houses3 %>% dplyr::select(-RecyclingRate)
 We weren't taking into account spatial adjustments - I think the whittling down threw off the original regressions. Following chunk creates a dataset of only variables we care about and includes redlining - was having trouble with the factor level with neighborhoods and catchments.
 ```{r regression final}
 
-Houses_Clean2 <- Houses_Clean %>%
-  mutate(PctBach_ACS = PctBach_ACS*100,
-         exterior_condition = replace(Houses_Clean$exterior_condition, is.na(Houses_Clean$exterior_condition), median(Houses_Clean$exterior_condition, na.rm = TRUE)))
+Houses_Clean <- Houses_Clean %>%
+  mutate(
+    PctBach_ACS = PctBach_ACS * 100,
+    exterior_condition = ifelse(is.na(exterior_condition), median(exterior_condition, na.rm = TRUE), exterior_condition),
+    number_of_bathrooms = ifelse(is.na(number_of_bathrooms), median(number_of_bathrooms, na.rm = TRUE), number_of_bathrooms),
+    number_of_bedrooms = ifelse(is.na(number_of_bedrooms), median(number_of_bedrooms, na.rm = TRUE), number_of_bedrooms),
+    interior_condition = ifelse(is.na(interior_condition), median(interior_condition, na.rm = TRUE), interior_condition),
+    fireplaces = ifelse(is.na(fireplaces), median(fireplaces, na.rm = TRUE), fireplaces),
+    total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area)
+  )
 
 
 regression_data <- Houses_Clean %>% dplyr::select(
@@ -456,8 +466,7 @@ Philly_Data.test <-
          sale_price.Predict = predict(reg.training, Philly_Data.test),
          sale_price.Error = sale_price.Predict - sale_price,
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
-         sale_price.APE = (abs(sale_price.Predict - sale_price)) / sale_price.Predict)%>%
-  filter(sale_price < 5000000)  
+         sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
  
 st_drop_geometry(Philly_Data.test) %>%
   select(sale_price.Predict, sale_price.Error, sale_price.AbsError, sale_price.APE) %>%
@@ -475,8 +484,6 @@ st_drop_geometry(Philly_Data.test) %>%
 
 
 # CV Results
-
-Example from book
 
 ```{r cross validation}
 
@@ -508,7 +515,7 @@ reg.cv
 
 # Pred vs Obs Scatterplot
 
-Example from book - edit wording
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!edit wording
 
 ```{r pred and obs}
 
@@ -516,10 +523,10 @@ Philly_Data.test %>%
   dplyr::select(sale_price.Predict, sale_price, Regression) %>%
     ggplot(aes(sale_price, sale_price.Predict)) +
   geom_point() +
-  stat_smooth(aes(sale_price, sale_price), 
-             method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
   stat_smooth(aes(sale_price.Predict, sale_price), 
               method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  stat_smooth(aes(sale_price, sale_price), 
+             method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
   labs(title="Predicted sale price as a function of observed price",
        subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
   plotTheme()
@@ -527,25 +534,24 @@ Philly_Data.test %>%
 ```
 
 # Residuals Map w/ Moran's I
+DAVE
 
 
-
-need to make sure there's no NA data to run this correctly
 ```{r moran map}
 
-coords.test <-  st_coordinates(Philly_Data.test) 
+coords.test <-  st_coordinates(Philly_Data.test)
 
 neighborList.test <- knn2nb(knearneigh(coords.test, 5))
 
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
- 
-Philly_Data.test %>% 
+
+Philly_Data.test %>%
   mutate(lagPriceError = lag.listw(spatialWeights.test, sale_price.Error)) %>%
   ggplot()+
   geom_point(aes(x =lagPriceError, y =sale_price.Error))
 
 
-moranTest <- moran.mc(Philly_Data.test$sale_price.Error, 
+moranTest <- moran.mc(Philly_Data.test$sale_price.Error,
                       spatialWeights.test, nsim = 999)
 
 
@@ -603,8 +609,8 @@ MAPE.Map
 
 ```
 
-# Scatterplot - MAPE by neighborhood mean price
-
+# Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
+OLIVER
 
 
 # Split by Census Groups
@@ -625,7 +631,7 @@ tracts17 <-
 
 grid.arrange(ncol = 2,
   ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = raceContext)) +
-    scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
+    scale_fill_manual(values = c("#FA7800", "#25CB10"), name="Race Context") +
     labs(title = "Race Context") +
     mapTheme() + theme(legend.position="bottom"), 
   ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = incomeContext)) +
