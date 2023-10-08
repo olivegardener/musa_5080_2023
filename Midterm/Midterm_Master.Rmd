@@ -98,9 +98,6 @@ parks <- st_read("data/parks.geojson") %>%
 vacant_lots <- st_read("data/Vacant_Lots.geojson") %>% 
   st_transform(crs = coordinate_system)
 
-playgrounds <- st_read("data/PPR_Playgrounds.geojson") %>% 
-  st_transform(crs = coordinate_system)
-
 trees <- st_read("data/trees.geojson") %>%
   na.omit() %>%
   st_as_sf(coords = c("LOC_X", "LOC_Y"), crs = "EPSG:4326") %>%
@@ -133,13 +130,6 @@ regional_rail <- st_read("data/Regional_Rail_Stations.geojson") %>%
 
 rail_stops <- st_join(light_rail, regional_rail)
 
-universities <- st_read("data/uni.geojson") %>% 
-  st_transform(crs = coordinate_system)
-hospitals <- st_read("data/Hospitals.geojson") %>% 
-  st_transform(crs = coordinate_system)
-
-eds_and_meds <- st_join(universities, hospitals)
-
 ```
 
 ### Extract polygon data to points
@@ -156,16 +146,14 @@ model_data <- model_data %>%
           # st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
           st_join(dplyr::select(neighborhoods, NAME)) %>%
           st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_RESTAURANTS)) %>% #HPSS is high produce supply store
-          st_join(dplyr::select(tracts2020, MedHHInc, MedRent, PctWhite, PctBach)) %>%
+          st_join(dplyr::select(tracts2020, MedHHInc, PctWhite, PctBach)) %>%
           rename(
                  MedHHInc_ACS = MedHHInc,
-                 MedRent_ACS = MedRent,
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
-                 # district = DIST_NAME,
                  neighborhood = NAME,
                  quality_produce_access = TOTAL_HPSS,
-                 dining = TOTAL_RESTAURANTS) %>% 
+                 low_produce_access = TOTAL_LPSS )%>% 
           mutate(PctWhite_ACS = PctWhite_ACS*100,
                  PctBach_ACS = PctBach_ACS*100,
                  holc_grade_val = as.numeric(holc_grade_val)
@@ -235,7 +223,7 @@ model_data <- model_data %>%
     age = ifelse(age<0, 0, age),
     neighborhood = as.factor(neighborhood)
   ) %>%
-  filter(sale_price < 1500000) # do we like this as filter
+  filter(sale_price < 2000000) # do we like this as filter
 
 
 glimpse(model_data)
