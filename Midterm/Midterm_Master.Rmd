@@ -278,6 +278,7 @@ st_drop_geometry(model_data) %>%
      plotTheme()
 
 ```
+These scatterplots show the expected correlations for each of these variables. There is a slight negative correlation between distance to park and sale price, meaning that generally speaking, the closer a house is to a park, the higher its sale price. For tree.count.buffer, vacant_lots_nn3, and quality_produce_access, these scatterplots show a positive correlation with sale_price, meaning that in general the more trees near a given house, the farther it is from the nearest three vacant lots, and the closer it is to  quality produce, the higher its expected sale price.
 
 # Map Home Prices
 
