@@ -153,7 +153,8 @@ model_data <- student_data %>%
 
 model_data <- model_data %>% 
           st_join(dplyr::select(redlining, holc_grade_val)) %>%
-          st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
+          # st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
+          st_join(dplyr::select(neighborhoods, NAME)) %>%
           st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_RESTAURANTS)) %>% #HPSS is high produce supply store
           st_join(dplyr::select(tracts2020, MedHHInc, MedRent, PctWhite, PctBach)) %>%
           rename(
@@ -161,7 +162,8 @@ model_data <- model_data %>%
                  MedRent_ACS = MedRent,
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
-                 district = DIST_NAME,
+                 # district = DIST_NAME,
+                 neighborhood = NAME,
                  quality_produce_access = TOTAL_HPSS,
                  dining = TOTAL_RESTAURANTS) %>% 
           mutate(PctWhite_ACS = PctWhite_ACS*100,
@@ -190,9 +192,9 @@ model_data <- model_data %>%
       rail_stop_nn1 = nn_function(st_coordinates(model_data), 
                                      st_coordinates(st_centroid(rail_stops)), 
                                      k = 1),
-      vacant_lots_nn5 = nn_function(st_coordinates(model_data), 
+      vacant_lots_nn3 = nn_function(st_coordinates(model_data), 
                                     st_coordinates(st_centroid(vacant_lots)), 
-                                    k = 5),
+                                    k = 3),
       playgrounds_nn2 = nn_function(st_coordinates(model_data), 
                                     st_coordinates(st_centroid(playgrounds)), 
                                     k = 2),
@@ -230,9 +232,11 @@ model_data <- model_data %>%
     tree.count.buffer = ifelse(is.na(tree.count.buffer), median(tree.count.buffer, na.rm = TRUE), tree.count.buffer),
     holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
     age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
-    age = ifelse(age<0, 0, age)
+    age = ifelse(age<0, 0, age),
+    neighborhood = as.factor(neighborhood)
   ) %>%
   filter(sale_price < 1500000) # do we like this as filter
+
 
 glimpse(model_data)
 ```
@@ -285,7 +289,7 @@ Example from book for facetwrap scatterplots
 ```{r scatterplots, fig.width=6, fig.height=4}
 
 st_drop_geometry(model_data) %>% 
-  select(sale_price, vacant_lots_nn5, playgrounds_nn2, quality_produce_access, tree.count.buffer) %>%
+  select(sale_price, vacant_lots_nn3, playgrounds_nn2, quality_produce_access, tree.count.buffer) %>%
   gather(Variable, Value, -sale_price) %>% 
    ggplot(aes(Value, sale_price)) +
      geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -315,8 +319,7 @@ Follow book - map quintile breaks over neighborhoods
 ```
 
 ```{r, fig.width=10}
-# Your ggplot code
-ggplot() +
+salepricemap <- ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
   geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
           aes(colour = sale_price), 
@@ -328,6 +331,7 @@ ggplot() +
   labs(title="Sale Price, Philly") +
   mapTheme()
 
+salepricemap
 
 ```
 
@@ -369,6 +373,23 @@ ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
 
 ```
 
+```{r, fig.width=10}
+ggplot() +
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = model_data %>% filter(vacant_lots_nn3 < quantile(vacant_lots_nn3, 0.99)), 
+          aes(colour = vacant_lots_nn3), 
+          show.legend = "point", size = .001) +
+  scale_colour_gradientn(colors = palette_sequential,
+                         name="Vacant Lot Proximity",
+                         labels = scales::label_number(scale = 1),
+                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
+                         trans = "reverse") +
+  labs(title="Proximity to Vacancy, Philly") +
+  mapTheme()
+
+
+```
+
 ```{r map3, fig.width=6, fig.height=4}
 
 playgrounds <- playgrounds %>%
@@ -406,8 +427,8 @@ summary(regression)
 
 ```{r regression training set, warning=FALSE}
 inTrain <- createDataPartition(
-              # y = paste(Philly_Data),
-              y = paste(Philly_Data$district),
+              # y = paste(Philly_Data$district),
+              y = paste(Philly_Data$neighborhood),
               p = .60, list = FALSE)
 Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
 Philly_Data.test <- Philly_Data[-inTrain,]  
@@ -435,8 +456,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 
 st_drop_geometry(Philly_Data.test) %>%
-  gather(Variable, Value, -Regression, -district) %>%
-  # gather(Variable, Value, -Regression) %>%
+  gather(Variable, Value, -Regression, -neighborhood) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
   group_by(Regression, Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
@@ -489,7 +509,7 @@ Philly_Data.test %>%
 DAVE
 
 
-```{r residuals plot}
+```{r residuals plot, fig.width=10}
 
 ggplot()+
   geom_sf(data=neighborhoods, fill = "white")+
@@ -535,34 +555,31 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 # Predicted Map (Test Set)
 
 UPDATE!!!!!
-```{r pred map}
+```{r pred map, fig.width=10}
 
-# Philly_Data.challenge <- model_data %>%
-#   filter(toPredict == "CHALLENGE",
-#          age < 500,
-#          sale_price < 2000000) %>%
-#   dplyr::select(-toPredict, -dining,)
-# 
-# Philly_Data.predict <- rbind(Philly_Data, Philly_Data.challenge)
-# 
-# Philly_Data.challenge <-
-#   Philly_Data.challenge %>%
-#   mutate(Regression = "Regression",
-#          sale_price.Predict = predict(reg.training, Philly_Data.predict),
-#          sale_price.Error = sale_price.Predict - sale_price,
-#          sale_price.AbsError = abs(sale_price.Predict - sale_price),
-#          sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
-# 
-# ggplot( )+
-#   geom_sf(data = neighborhoods, fill = "grey40") +
-#   geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Predict)), 
-#           show.legend = "point", size = .01) +
-#   scale_colour_manual(values = palette_sequential,
-#                    labels=qBr(Philly_Data.test,"sale_price"),
-#                    name="Quintile\nBreaks") +
-#   labs(title="Sale Price, Philly") +
-#   mapTheme()
+# Ensure that 'Philly_Data.challenge' only contains the observations you want to predict
+Philly_Data.challenge <- model_data %>%
+  # filter(toPredict == "CHALLENGE",
+  #        age < 500,
+  #        sale_price < 2000000) %>%
+  dplyr::select(-toPredict, -dining)
 
+# Generate predictions only for 'Philly_Data.challenge'
+Philly_Data.challenge <- Philly_Data.challenge %>%
+  mutate(sale_price_prediction = predict(reg.training, .))
+
+predictedsalepricemap <- ggplot() +
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = Philly_Data.challenge, aes(colour = sale_price_prediction),
+          show.legend = "point", size = .01) +
+  scale_colour_gradientn(colors = palette_sequential,
+                         name="Predicted Sale Price",
+                         labels = scales::label_number(scale = 1),
+                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5)) +
+  labs(title="Predicted Sale Price, Philly") +
+  mapTheme()
+
+grid.arrange(salepricemap, predictedsalepricemap, ncol=2)
 ```
 
 
@@ -574,8 +591,8 @@ Example from book
 # Spatial join
 Philly_Data.test <- st_join(Philly_Data.test, neighborhoods, join = st_within)
 
-Philly_Data.test <- Philly_Data.test %>% 
-  rename(neighborhood = NAME)
+# Philly_Data.test <- Philly_Data.test %>% 
+#   rename(neighborhood = NAME)
 
 # Grouping and summarization
 mean_MAPE_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
@@ -598,13 +615,11 @@ MAPE.Map <- ggplot() +
 MAPE.Map
 
 ```
-This shows that the model is good at predicting across much of the city, with errors clustered in a small handful of errors. Why is the absolute percent error so high in these neighborhoods?
+This shows that the model is good at predicting across much of the city, with errors clustered in a small handful of neighborhoods. Why is the absolute percent error so high in these neighborhoods?
 
 
 # Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
-OLIVER
 ```{r}
-
 # Calculate mean price by neighborhood
 mean_price_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
   group_by(neighborhood) %>%
@@ -616,7 +631,7 @@ neighborhood_summary <- left_join(mean_price_by_neighborhood, mean_MAPE_by_neigh
 
 # Create a scatterplot of MAPE by neighborhood as a function of mean price by neighborhood
 scatterplot <- ggplot(neighborhood_summary, aes(x = mean_price, y = mean.MAPE)) +
-  geom_point(aes(color = mean.MAPE), size = 3) +
+  geom_point(aes(color = mean.MAPE), size = 1) +
   scale_color_gradient(low = "green", high = "red") +
   labs(
     title = "Scatterplot of MAPE by Neighborhood as a Function of Mean Price",
