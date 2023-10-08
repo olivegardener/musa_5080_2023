@@ -158,6 +158,29 @@ Houses$CanopyPctQuMi <- CanopyPct100ft
 
 ```
 
+### Compute percent canopy cover within 500ft (ALT)
+```{r warning = FALSE}
+library(sf)
+library(future.apply)
+
+# Load TreeCanopy
+TreeCanopy <- st_read("/path_to_your_file/TreeCanopy.geojson")
+
+# Create buffers around each house
+HouseBuffers <- st_buffer(model_data, dist = (500))
+
+# Vectorized Intersection Area Calculation
+intersection_area <- st_area(st_intersection(HouseBuffers, TreeCanopy))
+
+# Vectorized Canopy Percentage Calculation
+CanopyPct100ft <- (intersection_area / st_area(HouseBuffers)) * 100
+
+# Add the canopy coverage percent values to the Houses data frame
+model_data$CanopyPctQuMi <- CanopyPct100ft
+
+
+```
+
 ### K nearest neighbors
 ```{r k nearest neighbors, warning=FALSE}
 # Houses <- Houses %>%

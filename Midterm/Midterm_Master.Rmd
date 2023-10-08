@@ -5,7 +5,7 @@ date: "2023-10-11"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r, include=FALSE}
 rm(list=ls())
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -107,6 +107,14 @@ trees <- st_read("data/trees.geojson") %>%
   st_transform(crs = coordinate_system) %>% 
   dplyr::select(-TREE_NAME, -TREE_DBH, -YEAR)
 
+# Change crs to include
+trees2 <- st_read("data/trees_OA.geojson") %>%
+  na.omit() %>%
+  st_as_sf(coords = c("LOC_X", "LOC_Y"), crs = "EPSG:4326") %>%
+  st_transform(crs = coordinate_system) %>%
+  st_intersection(philly_outline, trees2) %>%
+  dplyr::select(-TREE_NAME, -LOC_Y, -LOC_X)
+
 septa <- st_read("data/septa.geojson") %>% 
   st_transform(crs = coordinate_system)
 light_rail <- septa %>% 
@@ -120,8 +128,8 @@ food_access <- st_read("data/NeighborhoodFoodRetail.geojson") %>%
   st_transform(crs = coordinate_system)
 
 regional_rail <- st_read("data/Regional_Rail_Stations.geojson") %>% 
-  st_transform(crs = coordinate_system) 
-regional_rail <- st_intersection(philly_outline, regional_rail)
+  st_transform(crs = coordinate_system) %>% 
+  st_intersection(philly_outline, regional_rail)
 
 rail_stops <- st_join(light_rail, regional_rail)
 
@@ -161,6 +169,10 @@ model_data <- model_data %>%
                  holc_grade_val = as.numeric(holc_grade_val)
                  )
 
+# Sample Data for testing
+# n_sample <- round(nrow(model_data) * 0.1)
+# model_data <- model_data[sample(nrow(model_data), n_sample), ]
+
 ```
 
 ### Minimum distance
@@ -198,27 +210,6 @@ model_data$tree.count.buffer <- model_data %>%
 
 ```
 
-### Tree Canopy Percent in Buffer
-```{r warning = FALSE}
-# # Create buffers around each house
-# HouseBuffers <- st_buffer(model_data, dist = (500))
-# 
-# # Initialize an empty vector to store the canopy coverage percent for each house
-# CanopyPct100ft <- vector("numeric", length = nrow(model_data))
-# 
-# # Loop through each house buffer
-# for (i in 1:nrow(HouseBuffers)) {
-# # Calculate the intersection area between the current house buffer and the tree canopy
-# intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
-# 
-# # Calculate the canopy coverage percent for the current house buffer
-# CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
-# 
-# # Add the canopy coverage percent values to the Houses data frame
-# model_data$CanopyPctQuMi <- CanopyPct100ft
-model_data <- model_data %>% 
-  mutate(CanopyPctQuMi = 1)
-```
 
 ### Impute Values
 ```{r data na remove}
@@ -236,7 +227,6 @@ model_data <- model_data %>%
     MedRent_ACS = ifelse(is.na(MedRent_ACS), median(MedRent_ACS, na.rm = TRUE), MedRent_ACS),
     PctWhite_ACS = ifelse(is.na(PctWhite_ACS), median(PctWhite_ACS, na.rm = TRUE), PctWhite_ACS),
     total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area),
-    CanopyPctQuMi = ifelse(is.na(CanopyPctQuMi), median(CanopyPctQuMi, na.rm = TRUE), CanopyPctQuMi),
     tree.count.buffer = ifelse(is.na(tree.count.buffer), median(tree.count.buffer, na.rm = TRUE), tree.count.buffer),
     holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
     age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
@@ -342,6 +332,19 @@ ggplot() +
 ```
 
 # 3 Interesting Maps (bonus for something extra engaging)
+```{r heatmap1, fig.width=10}
+# ggplot() + geom_sf(data = neighborhoods, fill = "white") +
+#   stat_density2d(data = data.frame(st_coordinates(trees2)), 
+#                  aes(X, Y, fill = ..level.., alpha = ..level.., weight = trees2$TREE_DBH),
+#                  size = 0.01, bins = 40, geom = 'polygon') +
+#   scale_fill_gradient(low = "lightgreen", high = "darkgreen", 
+#                       breaks=c(0.000000003,0.00000003),
+#                       labels=c("Minimum","Maximum"), name = "Density") +
+#   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+#   labs(title = "Weighted Density of Trees, Philly") +
+#   mapTheme()
+
+```
 
 ```{r heatmap1, fig.width=10}
 ggplot() + geom_sf(data = neighborhoods, fill = "white") +
@@ -352,7 +355,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
                       breaks=c(0.000000003,0.00000003),
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Weighted Density of Trees, Philly") +
+  labs(title = "Density of Trees, Philly") +
   mapTheme()
 
 ```
@@ -587,7 +590,7 @@ neighborhoods <- neighborhoods %>%
 
 MAPE.Map <- ggplot() + 
   geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-  scale_fill_gradient(low = "lightgreen", high = "red",
+  scale_fill_gradient(low = "lightblue", high = "red",
                         name = "MAPE") +
   labs(title = "Mean test set MAPE by neighborhood") +
   mapTheme()
