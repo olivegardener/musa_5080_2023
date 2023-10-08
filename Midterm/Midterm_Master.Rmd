@@ -221,9 +221,12 @@ model_data <- model_data %>%
     holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
     age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
     age = ifelse(age<0, 0, age),
-    neighborhood = as.factor(neighborhood)
-  ) %>%
-  filter(sale_price < 2000000) # do we like this as filter
+    neighborhood = as.factor(neighborhood),
+    exterior_condition = as.integer(exterior_condition),
+    number_of_bathrooms = as.integer(number_of_bathrooms),
+    holc_grade_val = as.integer(holc_grade_val),
+    tree.count.buffer = as.integer(tree.count.buffer)) %>%
+    filter(sale_price < quantile(sale_price, 0.99))
 
 
 glimpse(model_data)
@@ -309,7 +312,7 @@ Follow book - map quintile breaks over neighborhoods
 ```{r, fig.width=10}
 salepricemap <- ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
+  geom_sf(data = model_data), 
           aes(colour = sale_price), 
           show.legend = "point", size = .001) +
   scale_colour_gradientn(colors = palette_sequential,
@@ -400,8 +403,7 @@ ggplot() + geom_sf(data = neighborhoods, aes(fill = playground_count))+
 
 Philly_Data <- model_data %>%
   filter(toPredict == "MODELLING",
-         age < 500,
-         sale_price < 2000000) %>%
+         age < 500) %>%
   dplyr::select(-toPredict, -dining,)
 
 regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(Philly_Data)))
@@ -432,8 +434,7 @@ reg.training <-
 
 Philly_Data.test <-
   Philly_Data.test %>%
-  mutate(Regression = "Regression",
-         sale_price.Predict = predict(reg.training, Philly_Data.test),
+  mutate(sale_price.Predict = predict(reg.training, Philly_Data.test),
          sale_price.Error = sale_price.Predict - sale_price,
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
          sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
@@ -444,7 +445,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 
 st_drop_geometry(Philly_Data.test) %>%
-  gather(Variable, Value, -Regression, -neighborhood) %>%
+  gather(Variable, Value, -neighborhood) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
   group_by(Regression, Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
@@ -556,6 +557,25 @@ Philly_Data.challenge <- model_data %>%
 Philly_Data.challenge <- Philly_Data.challenge %>%
   mutate(sale_price_prediction = predict(reg.training, .))
 
+# Determine global limits
+global_min <- min(min(model_data$sale_price), min(Philly_Data.challenge$sale_price_prediction))
+global_max <- max(max(model_data$sale_price), max(Philly_Data.challenge$sale_price_prediction))
+
+# Your ggplot code for salepricemap
+salepricemap <- ggplot() +
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
+          aes(colour = sale_price), 
+          show.legend = "point", size = .001) +
+  scale_colour_gradientn(colors = palette_sequential,
+                         name="Sale Price",
+                         labels = scales::label_number(scale = 1),
+                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
+                         limits = c(global_min, global_max)) +  # Set limits
+  labs(title="Sale Price, Philly") +
+  mapTheme()
+
+# Your ggplot code for predictedsalepricemap
 predictedsalepricemap <- ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
   geom_sf(data = Philly_Data.challenge, aes(colour = sale_price_prediction),
@@ -563,11 +583,14 @@ predictedsalepricemap <- ggplot() +
   scale_colour_gradientn(colors = palette_sequential,
                          name="Predicted Sale Price",
                          labels = scales::label_number(scale = 1),
-                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5)) +
+                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
+                         limits = c(global_min, global_max)) +  # Set limits
   labs(title="Predicted Sale Price, Philly") +
   mapTheme()
 
+# Arrange the plots side by side
 grid.arrange(salepricemap, predictedsalepricemap, ncol=2)
+
 ```
 
 
@@ -579,8 +602,6 @@ Example from book
 # Spatial join
 Philly_Data.test <- st_join(Philly_Data.test, neighborhoods, join = st_within)
 
-# Philly_Data.test <- Philly_Data.test %>% 
-#   rename(neighborhood = NAME)
 
 # Grouping and summarization
 mean_MAPE_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
@@ -603,7 +624,7 @@ MAPE.Map <- ggplot() +
 MAPE.Map
 
 ```
-This shows that the model is good at predicting across much of the city, with errors clustered in a small handful of neighborhoods. Why is the absolute percent error so high in these neighborhoods?
+This shows that the model is good at predicting across much of the city, with errors clustered in one neighborhood. Why is the absolute percent error so high in that neighborhood?
 
 
 # Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
