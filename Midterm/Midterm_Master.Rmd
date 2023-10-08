@@ -1,7 +1,7 @@
 ---
 title: "PPA_Midterm"
 author: "Oliver Atwood + Dave Drennan"
-date: "2023-10-01"
+date: "2023-10-11"
 output: html_document
 ---
 
@@ -20,6 +20,7 @@ library(httr)
 library(rgdal)
 library(corrplot)
 library(tidyverse)
+library(tidycensus)
 library(dplyr)
 library(sf)
 library(spdep)
@@ -38,6 +39,7 @@ library(broom.mixed) # needed for effects plots
 library(lubridate)
 library(stargazer)
 library(purrr)
+library(tigris)
 
 # Coordinate System
 coordinate_system <- 2272
@@ -46,163 +48,179 @@ options(scipen = 999)
 
 Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 
+palette_sequential <- c("#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026")
+palette_diverging <- c("#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99")
+palette_three <- c("#e66101", "#f7f7f7", "#5e3c99")
+
 ```
 
 ### Load studentData
 ```{r warning=FALSE}
-Houses <- st_read("data/studentData.geojson") %>%
-  st_transform(crs = coordinate_system) %>% 
-    dplyr::select(sale_price, basements, building_code_description, category_code_description, central_air, exterior_condition,
-                  fireplaces, garage_spaces, interior_condition, number_of_bathrooms, number_of_bedrooms, number_of_rooms,
-                  number_stories, quality_grade, sale_date, total_area, total_livable_area, type_heater, year_built, 
-                  building_code_description_new, musaID, geometry) %>% 
-    mutate(age = 2023-year_built) %>% 
-    dplyr::select(-year_built) %>%
-  filter(sale_price < quantile(sale_price, 0.95))
+
+student_data <- st_read("data/studentData.geojson") %>% 
+  st_transform(crs = coordinate_system) 
 
 ```
 
 ## Read wrangled data
 ```{r, message=FALSE}
-##OA Local files
-# TreeCanopy <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/TreeCanopy.geojson")
-# landuse <- st_read("/Users/oliveratwood/Box Sync/PPA Midterm/data/Land_Use.geojson")%>%
-#   st_transform(crs = coordinate_system)
 
-catchments <- st_read("data/School_Catchment/Catchment_ES_2021-22") %>% st_transform(crs = coordinate_system)
-Redlined <- st_read("data/redlining.geojson")
-Vacant_Lots <- st_read("data/Vacant_Lots.geojson")
-Recycling_Diversion_Rate <- st_read("data/Recycling_Diversion_Rate.geojson")
-Hospitals <- st_read("data/Hospitals.geojson")
-Regional_Rail_Stations <- st_read("data/Regional_Rail_Stations.geojson")
-Existing_Trails <- st_read("data/Existing_Trails.geojson")
-Traffic_Collisions <- st_read("data/PhillyHealth_Collisions.geojson")
-trees <- st_read("data/trees.geojson") %>% mutate(TREE_DBH = as.factor(TREE_DBH))
-bike_network <- st_read("data/bike_network.geojson")
-parks <- st_read("data/parks.geojson")
-uni <- st_read("data/uni.geojson")
+philly_outline <- counties(state = "PA") %>% 
+  filter(NAME == "Philadelphia") %>% 
+  st_transform(crs = coordinate_system) %>% 
+  select(NAME, geometry)
+
+tracts2020 <- st_read("data/tracts2020.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+planning_districts <- st_read("data/Planning_Districts.geojson") %>% 
+  st_transform(coordinate_system)
+
 neighborhoods <- st_read("data/neighborhoods.geojson")
-landcare_lots <- st_read("data/landcare_lots.geojson")
-tracts2020 <- st_read("data/tracts2020.geojson")
-septa <- st_read("data/septa.geojson")
-planning_districts <- st_read("data/Planning_Districts.geojson") %>% st_transform(coordinate_system)
-septa_bus <- septa %>% 
-  filter(mode == "Bus")
-septa_trolley <- septa %>% 
-  filter(mode == "Trolley")
-septa_highspeed <- septa %>% 
-  filter(mode == "Highspeed")
 
-```
+redlining <- st_read("data/redlining.geojson") %>% 
+  st_transform(crs = coordinate_system) %>%
+  mutate(
+    holc_grade_val = case_when(
+      holc_grade == "Commercial" ~ "0",
+      holc_grade == "A" ~ "1",
+      holc_grade == "B" ~ "2",
+      holc_grade == "C" ~ "3",
+      holc_grade == "D" ~ "4",
+      )
+  )
 
-### Sample Data (for refining methodolgy)
-```{r}
-# Sample Data for testing
-# n_sample <- round(nrow(Houses) * 0.1)
-# Houses <- Houses[sample(nrow(Houses), n_sample), ]
+parks <- st_read("data/parks.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+vacant_lots <- st_read("data/Vacant_Lots.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+playgrounds <- st_read("data/PPR_Playgrounds.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+trees <- st_read("data/trees.geojson") %>%
+  na.omit() %>%
+  st_as_sf(coords = c("LOC_X", "LOC_Y"), crs = "EPSG:4326") %>%
+  st_transform(crs = coordinate_system) %>% 
+  dplyr::select(-TREE_NAME, -TREE_DBH, -YEAR)
+
+septa <- st_read("data/septa.geojson") %>% 
+  st_transform(crs = coordinate_system)
+light_rail <- septa %>% 
+  st_intersection(philly_outline, septa) %>%
+  filter(
+    (mode == "Highspeed" | mode == "Trolley"), 
+    (directionn == "Northbound" | directionn == "Eastbound")
+    )
+
+food_access <- st_read("data/NeighborhoodFoodRetail.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+regional_rail <- st_read("data/Regional_Rail_Stations.geojson") %>% 
+  st_transform(crs = coordinate_system) 
+regional_rail <- st_intersection(philly_outline, regional_rail)
+
+rail_stops <- st_join(light_rail, regional_rail)
+
+universities <- st_read("data/uni.geojson") %>% 
+  st_transform(crs = coordinate_system)
+hospitals <- st_read("data/Hospitals.geojson") %>% 
+  st_transform(crs = coordinate_system)
+
+eds_and_meds <- st_join(universities, hospitals)
+
 ```
 
 ### Extract polygon data to points
 ```{r}
-Houses <- Houses %>% 
-          st_join(dplyr::select(Recycling_Diversion_Rate, SCORE)) %>% 
-          st_join(dplyr::select(neighborhoods, NAME)) %>%
-          st_join(dplyr::select(catchments, ES_Name)) %>%
-          st_join(dplyr::select(Redlined, holc_grade)) %>%
+
+model_data <- student_data %>% 
+  dplyr::select(musaID, toPredict, sale_price, exterior_condition, fireplaces, interior_condition, number_of_bathrooms, number_of_bedrooms,
+                  total_area, total_livable_area, year_built, geometry, ) %>% 
+  mutate(age = 2023-year_built) %>% 
+  dplyr::select(-year_built)
+
+model_data <- model_data %>% 
+          st_join(dplyr::select(redlining, holc_grade_val)) %>%
           st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
-          st_join(dplyr::select(tracts2020, MedHHInc, MedRent, HomeOwnRate, PopDensity, PctWhite, PctBach, Car2WorkPct)) %>%
-          rename(RecyclingRate = SCORE,
-                 Neighborhood = NAME,
+          st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_RESTAURANTS)) %>% #HPSS is high produce supply store
+          st_join(dplyr::select(tracts2020, MedHHInc, MedRent, PctWhite, PctBach)) %>%
+          rename(
                  MedHHInc_ACS = MedHHInc,
                  MedRent_ACS = MedRent,
-                 PopDensity_ACS = PopDensity,
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
-                 Car2WorkPct_ACS = Car2WorkPct,
-                 dist = DIST_NAME) %>% 
-          mutate(PctBach_ACS = PctBach_ACS*100) %>% 
-          select(-HomeOwnRate)
+                 district = DIST_NAME,
+                 quality_produce_access = TOTAL_HPSS,
+                 dining = TOTAL_RESTAURANTS) %>% 
+          mutate(PctWhite_ACS = PctWhite_ACS*100,
+                 PctBach_ACS = PctBach_ACS*100,
+                 holc_grade_val = as.numeric(holc_grade_val)
+                 )
 
 ```
 
-### Compute min dist to trails and bike network
-```{r}
-# these are proxy values to speed runs, replace with commented section in final version
-Houses$dist2trail <- 5
-Houses$dist2bike <- 5
-Houses$dist2park <- 5
-
-# ## Trails
-# # Compute distances
-# distances <- st_distance(Houses, Existing_Trails)
-# # Compute the minimum distance for each point to the nearest line
-# min_distances <- apply(distances, 1, min)
-# # Join the minimum distances to the attribute table of the points
-# Houses$dist2trail <- min_distances
-# 
-# ## Bike Network
-# distances <- st_distance(Houses, bike_network)
-# min_distances <- apply(distances, 1, min)
-# Houses$dist2bike <- min_distances
-# 
-# # Parks
-# distances <- st_distance(Houses, parks)
-# min_distances <- apply(distances, 1, min)
-# Houses$dist2park <- min_distances
-
-```
-
-### Compute percent canopy cover within 500ft
-```{r warning = FALSE}
-# # Create buffers around each house
-# HouseBuffers <- st_buffer(Houses, dist = (0.25*5280))
-# 
-# # Initialize an empty vector to store the canopy coverage percent for each house
-# CanopyPct100ft <- vector("numeric", length = nrow(Houses))
-# 
-# # Loop through each house buffer
-# for (i in 1:nrow(HouseBuffers)) {
-# # Calculate the intersection area between the current house buffer and the tree canopy
-# intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
-#   
-# # Calculate the canopy coverage percent for the current house buffer
-# CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
-# 
-# # Add the canopy coverage percent values to the Houses data frame
-# Houses$CanopyPctQuMi <- CanopyPct100ft
-
+### Minimum distance
+```{r minimum distance}
+# Parks
+distances <- st_distance(model_data, parks)
+min_distances <- apply(distances, 1, min)
+model_data$dist2park <- min_distances
 ```
 
 ### K nearest neighbors
 ```{r k nearest neighbors, warning=FALSE}
-Houses <- Houses %>%
-    mutate(hospitals_nn1 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(Hospitals), k = 1),
-           rr_station_nn1 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(Regional_Rail_Stations), k = 1),
-           septa_trolley_nn1 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(septa_trolley), k = 1),
-           septa_bus_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(septa_bus), k = 5), # look into this?
-           septa_highspeed_nn1 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(septa_highspeed), k = 1),
-           collisions_nn3 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(Traffic_Collisions), k = 3), #data old, keep?
-           unis_nn1 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(uni)), k = 1),
-           landcare_lots_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(landcare_lots)), k = 5),
-           vacant_lots_nn5 = nn_function(st_coordinates(Houses), 
-                              st_coordinates(st_centroid(Vacant_Lots)), k = 5)) %>% 
-    filter(sale_price != 0)
+model_data <- model_data %>%
+    mutate(
+      rail_stop_nn1 = nn_function(st_coordinates(model_data), 
+                                     st_coordinates(st_centroid(rail_stops)), 
+                                     k = 1),
+      vacant_lots_nn5 = nn_function(st_coordinates(model_data), 
+                                    st_coordinates(st_centroid(vacant_lots)), 
+                                    k = 5),
+      playgrounds_nn2 = nn_function(st_coordinates(model_data), 
+                                    st_coordinates(st_centroid(playgrounds)), 
+                                    k = 2),
+      )
+
+```
+
+### Trees buffer
+```{r buffer}
+
+model_data$trees.buffer <- model_data %>% 
+    st_buffer(500) %>% 
+    aggregate(mutate(trees, counter = 1),., sum) %>%
+    pull(counter)
 
 ```
 
 
-```{r deliverables packages}
-palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+```{r data na remove}
+
+model_data <- model_data %>%
+  mutate(
+    exterior_condition = ifelse(is.na(exterior_condition), median(exterior_condition, na.rm = TRUE), exterior_condition),
+    interior_condition = ifelse(is.na(interior_condition), median(interior_condition, na.rm = TRUE), interior_condition),
+    number_of_bathrooms = ifelse(is.na(number_of_bathrooms), median(number_of_bathrooms, na.rm = TRUE), number_of_bathrooms),
+    number_of_bedrooms = ifelse(is.na(number_of_bedrooms), median(number_of_bedrooms, na.rm = TRUE), number_of_bedrooms),
+    fireplaces = ifelse(is.na(fireplaces), median(fireplaces, na.rm = TRUE), fireplaces),
+    quality_produce_access = ifelse(is.na(quality_produce_access), median(quality_produce_access, na.rm = TRUE), quality_produce_access),
+    dining = ifelse(is.na(dining), median(dining, na.rm = TRUE), dining),
+    MedHHInc_ACS = ifelse(is.na(MedHHInc_ACS), median(MedHHInc_ACS, na.rm = TRUE), MedHHInc_ACS),
+    MedRent_ACS = ifelse(is.na(MedRent_ACS), median(MedRent_ACS, na.rm = TRUE), MedRent_ACS),
+    PctWhite_ACS = ifelse(is.na(PctWhite_ACS), median(PctWhite_ACS, na.rm = TRUE), PctWhite_ACS),
+    total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area),
+    trees.buffer = ifelse(is.na(trees.buffer), median(trees.buffer, na.rm = TRUE), trees.buffer),
+    holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
+    age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
+    age = ifelse(age<0, 0, age)
+  ) %>%
+  filter(sale_price < 1500000) # do we like this as filter
 
 ```
+
 
 Deliverables
 
@@ -213,14 +231,34 @@ Deliverables
 ```{r stargazer table}
 
 # Convert sf object to data frame
-Houses_df <- as.data.frame(Houses) %>%
+model_data_df <- as.data.frame(model_data) %>%
   select(-musaID)
 
-parameters <- names(Houses_df)
+parameters <- names(model_data_df)
 
 # option parameter can be used to set order based on index
-stargazer(Houses_df, type = "text", title = "Table 1: Summary Statistics")
+stargazer(model_data_df, type = "text", title = "Table 1: Summary Statistics")
 
+```
+
+## Correlation matrix
+```{r correlation matrix, fig.width=14}
+# Select variables of interest and convert them to numeric
+vars_of_interest <- select_if(st_drop_geometry(model_data), is.numeric) %>% 
+  select(-musaID) %>% 
+  na.omit()
+
+ggcorrplot(
+  round(cor(vars_of_interest), 2), 
+  p.mat = cor_pmat(vars_of_interest),
+  colors = palette_three,
+  type="lower",
+  insig = "blank",
+  lab = TRUE,  # Ensure labels are shown
+  lab_size = 2.5  # Adjust the size of the labels
+  ) +  
+    labs(title = "Correlation across numeric variables") +
+  theme(axis.text = element_text(size = 6)) 
 
 ```
 
@@ -228,15 +266,14 @@ stargazer(Houses_df, type = "text", title = "Table 1: Summary Statistics")
 # Home Price Scatterplots
 Example from book for facetwrap scatterplots
 
-```{r scatterplots, fig.width=9, fig.height=3}
+```{r scatterplots, fig.width=8, fig.height=8}
 
-st_drop_geometry(Houses) %>% 
-  select(sale_price, vacant_lots_nn5, dist2bike, septa_bus_nn5, collisions_nn3) %>%
-  filter(sale_price <= quantile(sale_price, 0.95)) %>%
+st_drop_geometry(model_data) %>% 
+  select(sale_price, vacant_lots_nn5, playgrounds_nn2, quality_produce_access, trees.buffer) %>%
   gather(Variable, Value, -sale_price) %>% 
-   ggplot(aes(log(Value), sale_price)) +
+   ggplot(aes(Value, sale_price)) +
      geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, ncol = 4, scales = "free") +
+     facet_wrap(~Variable, ncol = 2, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
 
@@ -249,11 +286,11 @@ Follow book - map quintile breaks over neighborhoods
 
 #book used price per square foot
 ggplot() +
-  geom_sf(data = planning_districts, fill = "grey40") +
-  geom_sf(data = Houses, aes(colour = q5(sale_price)), 
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = model_data, aes(colour = q5(sale_price)), 
           show.legend = "point", size = .01) +
-  scale_colour_manual(values = palette5,
-                   labels=qBr(Houses,"sale_price"),
+  scale_colour_manual(values = palette_sequential,
+                   labels=qBr(model_data,"sale_price"),
                    name="Quintile\nBreaks") +
   labs(title="Sale Price, Philly") +
   mapTheme()
@@ -278,129 +315,44 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
 ```
 
 ```{r map2}
-ggplot() + geom_sf(data = neighborhoods, fill = "white") +
-  stat_density2d(data = data.frame(st_coordinates(Vacant_Lots)), 
-                 aes(X, Y, fill = ..level.., alpha = ..level..),
-                 size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "pink", high = "darkred", 
-                      breaks=c(0.000000003,0.00000003),
-                      labels=c("Minimum","Maximum"), name = "Density") +
-  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Vacant Lots, Philly") +
-  mapTheme()
-
-```
-+ map for distance to bike lanes
-```{r map}
-ggplot() + geom_sf(data = neighborhoods, fill = "white") +
-  stat_density2d(data = data.frame(st_coordinates(bike_network)), 
-                 aes(X, Y, fill = ..level.., alpha = ..level..),
-                 size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "lightblue", high = "darkblue", 
-                      breaks=c(0.000000003,0.00000003),
-                      labels=c("Minimum","Maximum"), name = "Density") +
-  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  geom_sf(data = bike_network, color = "green", alpha = .3)+
-  labs(title = "Density of Bike Network, Philly") +
+ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
+  scale_fill_gradient(low = "lavender", high = "purple", name = "Store Count")+
+  labs(title = "High Quality Produce Access, Philly",
+       subtitle = "Data provided per block group") +
   mapTheme()
 
 ```
 
-Let's try making a model with all of our variables, to start.
+```{r map3}
 
-```{r model 1}
-Houses_Clean <- dplyr::select(Houses, -musaID)
+playgrounds <- playgrounds %>%
+  select(OBJECTID, geometry)
 
-reg1 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses_Clean), is.numeric))
-summary(reg1)
+neighborhoods$playground_count <- neighborhoods %>% 
+    aggregate(mutate(playgrounds, counter = 1),., sum) %>%
+    pull(counter)
 
-```
-Let's try narrowing down the variables based on a correlogram
-```{r correlation matrix, fig.width=14}
-# Select variables of interest and convert them to numeric
-vars_of_interest <- select_if(st_drop_geometry(Houses), is.numeric) %>% 
-  select(-musaID) %>% 
-  na.omit()
-
-ggcorrplot(
-  round(cor(vars_of_interest), 2), 
-  p.mat = cor_pmat(vars_of_interest),
-  colors = c("#FA7800", "white", "#25CB10"),
-  type="lower",
-  insig = "blank",
-  lab = TRUE,  # Ensure labels are shown
-  lab_size = 2.5  # Adjust the size of the labels
-  ) +  
-    labs(title = "Correlation across numeric variables") +
-  theme(axis.text = element_text(size = 6)) 
-
-```
-From this correlogram, we can see that there are some potentially co-linear variables and variables with low correlation with sale_price. Let's remove these variables and make a model with this smaller set.
-
-```{r model 2}
-Houses2 <- Houses_Clean %>% dplyr::select(-number_stories, -age, -PopDensity_ACS, -Car2WorkPct_ACS, -dist2trail, -dist2park, -hospitals_nn1, -rr_station_nn1, -septa_trolley_nn1, -septa_highspeed_nn1, -unis_nn1, -landcare_lots_nn5)
-
-reg2 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses2), is.numeric))
-summary(reg2)
-
-
-coefficients(reg2)
-```
-Our R-squared variable only decreased by 0.01. Not bad at all, given the number of variables removed. There are a lot of variables in this model that appear to have low significance, let's remove them.
-
-
-```{r model 3}
-Houses3 <- Houses2 %>% dplyr::select(-garage_spaces, -MedHHInc_ACS, -MedRent_ACS, -PctWhite_ACS, -dist2bike, -collisions_nn3, -vacant_lots_nn5)
-
-reg3 <- lm(sale_price ~ ., data = select_if(st_drop_geometry(Houses3), is.numeric))
-summary(reg3)
+ggplot() + geom_sf(data = neighborhoods, aes(fill = playground_count))+
+  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
+  labs(title = "Playgrounds per Neighborhood, Philly",
+       subtitle = "Philly Parks and Rec Sites",
+       legend = "Count") +
+  mapTheme()
 
 ```
 
-```{r model 4}
-Houses4 <- Houses3 %>% dplyr::select(-RecyclingRate)
-```
+```{r regression}
 
+Philly_Data <- model_data %>%
+  filter(toPredict == "MODELLING",
+         age < 500,
+         sale_price < 2000000) %>%
+  dplyr::select(-toPredict, -dining,)
 
-We weren't taking into account spatial adjustments - I think the whittling down threw off the original regressions. Following chunk creates a dataset of only variables we care about and includes redlining - was having trouble with the factor level with neighborhoods and catchments.
-```{r regression final}
-
-Houses_Clean <- Houses_Clean %>%
-  mutate(
-    PctBach_ACS = PctBach_ACS * 100,
-    exterior_condition = ifelse(is.na(exterior_condition), median(exterior_condition, na.rm = TRUE), exterior_condition),
-    number_of_bathrooms = ifelse(is.na(number_of_bathrooms), median(number_of_bathrooms, na.rm = TRUE), number_of_bathrooms),
-    number_of_bedrooms = ifelse(is.na(number_of_bedrooms), median(number_of_bedrooms, na.rm = TRUE), number_of_bedrooms),
-    interior_condition = ifelse(is.na(interior_condition), median(interior_condition, na.rm = TRUE), interior_condition),
-    fireplaces = ifelse(is.na(fireplaces), median(fireplaces, na.rm = TRUE), fireplaces),
-    total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area)
-  )
-
-
-regression_data <- Houses_Clean %>% dplyr::select(
-                                                  sale_price,
-                                                  exterior_condition, 
-                                                  fireplaces, 
-                                                  interior_condition, 
-                                                  number_of_bathrooms, 
-                                                  number_of_bedrooms, 
-                                                  #number_of_rooms, 
-                                                  total_area, 
-                                                  total_livable_area, 
-                                                  PctBach_ACS, 
-                                                  septa_bus_nn5, 
-                                                  #Neighborhood, 
-                                                  #holc_grade,
-                                                  dist
-                                                  #ES_Name
-                                                  ) 
-
-regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(regression_data)))
+regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(Philly_Data)))
 
 summary(regression)
 
-
-Philly_Data <- regression_data
 ```
 
 # Table of Results (Training Set)
@@ -408,49 +360,11 @@ Philly_Data <- regression_data
 
 ```{r regression training set}
 inTrain <- createDataPartition(
-              y = paste(Philly_Data$dist),
+              y = paste(Philly_Data$district),
               p = .60, list = FALSE)
 Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
 Philly_Data.test <- Philly_Data[-inTrain,]  
  
-Philly_Data.training <- Philly_Data.training %>%
-                                    dplyr::select(sale_price,
-                                                  exterior_condition, 
-                                                  fireplaces, 
-                                                  interior_condition, 
-                                                  number_of_bathrooms, 
-                                                  number_of_bedrooms, 
-                                                  #number_of_rooms, 
-                                                  total_area, 
-                                                  total_livable_area, 
-                                                  PctBach_ACS, 
-                                                  septa_bus_nn5, 
-                                                  #Neighborhood, 
-                                                  dist,
-                                                  # Neighborhood, 
-                                                  # holc_grade, 
-                                                  #ES_Name
-                                                  ) 
-
-Philly_Data.test <- Philly_Data.test %>%
-                                    dplyr::select(sale_price,
-                                                  exterior_condition, 
-                                                  fireplaces, 
-                                                  interior_condition, 
-                                                  number_of_bathrooms, 
-                                                  number_of_bedrooms, 
-                                                  #number_of_rooms, 
-                                                  total_area, 
-                                                  total_livable_area, 
-                                                  PctBach_ACS, 
-                                                  septa_bus_nn5, 
-                                                  #Neighborhood, 
-                                                  dist,
-                                                  # Neighborhood, 
-                                                  # holc_grade, 
-                                                  #ES_Name
-                                                  )
-
 reg.training <- 
   lm(sale_price ~ ., data = as.data.frame(Philly_Data.training))
 
@@ -474,7 +388,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 
 st_drop_geometry(Philly_Data.test) %>%
-  gather(Variable, Value, -Regression, -dist) %>%
+  gather(Variable, Value, -Regression, -district) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
   group_by(Regression, Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
@@ -491,25 +405,15 @@ fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
 
 reg.cv <- 
-  train(sale_price ~ ., data = st_drop_geometry(Philly_Data.training) %>% 
-                                dplyr::select(
-                                              sale_price,
-                                              exterior_condition, 
-                                              fireplaces, 
-                                              interior_condition, 
-                                              number_of_bathrooms, 
-                                              number_of_bedrooms, 
-                                              #number_of_rooms, 
-                                              total_area, 
-                                              total_livable_area, 
-                                              PctBach_ACS, 
-                                              septa_bus_nn5,
-                                              dist
-                                              #holc_grade
-                                              ),
+  train(sale_price ~ ., data = st_drop_geometry(Philly_Data.training),
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
+
+plot1 <- reg.cv$resample
+
+ggplot()+
+  geom_histogram(data=plot1, aes(x = MAE))
 
 ```
 
@@ -537,7 +441,18 @@ Philly_Data.test %>%
 DAVE
 
 
-```{r moran map}
+```{r residuals plot}
+
+ggplot()+
+  geom_sf(data=neighborhoods, fill = "white")+
+  geom_sf(data=Philly_Data.test, aes(color = sale_price.Error), size = .01, alpha = .8)+
+  scale_color_gradient(low = "red", high = "yellow", name = "Residuals") + 
+  mapTheme()
+
+```
+  
+
+```{r spatial lag in errors map}
 
 coords.test <-  st_coordinates(Philly_Data.test)
 
@@ -549,25 +464,52 @@ Philly_Data.test %>%
   mutate(lagPriceError = lag.listw(spatialWeights.test, sale_price.Error)) %>%
   ggplot()+
   geom_point(aes(x =lagPriceError, y =sale_price.Error))
+```
 
+
+```{r moran}
 
 moranTest <- moran.mc(Philly_Data.test$sale_price.Error,
                       spatialWeights.test, nsim = 999)
 
 
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count") +
+  plotTheme()
 
 ```
 # Predicted Map (Test Set)
 
-Is this kind of map right?
-
+UPDATE!!!!!
 ```{r pred map}
 
-ggplot() +
+Philly_Data.challenge <- model_data %>%
+  filter(toPredict == "CHALLENGE",
+         age < 500,
+         sale_price < 2000000) %>%
+  dplyr::select(-toPredict, -dining,)
+
+Philly_Data.predict <- rbind(Philly_Data, Philly_Data.challenge)
+
+Philly_Data.challenge <-
+  Philly_Data.challenge %>%
+  mutate(Regression = "Regression",
+         sale_price.Predict = predict(reg.training, Philly_Data.predict),
+         sale_price.Error = sale_price.Predict - sale_price,
+         sale_price.AbsError = abs(sale_price.Predict - sale_price),
+         sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
+
+ggplot( )+
   geom_sf(data = neighborhoods, fill = "grey40") +
-  geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price)), 
+  geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Predict)), 
           show.legend = "point", size = .01) +
-  scale_colour_manual(values = palette5,
+  scale_colour_manual(values = palette_sequential,
                    labels=qBr(Philly_Data.test,"sale_price"),
                    name="Quintile\nBreaks") +
   labs(title="Sale Price, Philly") +
@@ -600,7 +542,7 @@ neighborhoods <- neighborhoods %>%
 
 MAPE.Map <- ggplot() + 
   geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-  scale_fill_gradient(low = palette5[1], high = palette5[5],
+  scale_fill_gradient(low = "blue", high = "red",
                         name = "MAPE") +
   labs(title = "Mean test set MAPE by neighborhood") +
   mapTheme()
@@ -618,9 +560,9 @@ OLIVER
 Example from book
 
 ```{r tracts}
-tracts17 <- 
+tracts21 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E","B06011_001"), 
-          year = 2017, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
+          year = 2021, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
   st_transform(crs=2272)  %>%
   rename(TotalPop = B01001_001E,
          NumberWhites = B01001A_001E,
@@ -630,17 +572,17 @@ tracts17 <-
          incomeContext = ifelse(Median_Income > 32322, "High Income", "Low Income"))
 
 grid.arrange(ncol = 2,
-  ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = raceContext)) +
+  ggplot() + geom_sf(data = na.omit(tracts21), aes(fill = raceContext)) +
     scale_fill_manual(values = c("#FA7800", "#25CB10"), name="Race Context") +
     labs(title = "Race Context") +
     mapTheme() + theme(legend.position="bottom"), 
-  ggplot() + geom_sf(data = na.omit(tracts17), aes(fill = incomeContext)) +
+  ggplot() + geom_sf(data = na.omit(tracts21), aes(fill = incomeContext)) +
     scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
     labs(title = "Income Context") +
     mapTheme() + theme(legend.position="bottom"))
 
 #MAPE for both regressions by race
-st_join(Philly_Data.test, tracts17) %>% 
+st_join(Philly_Data.test, tracts21) %>% 
   group_by(Regression, raceContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
@@ -648,7 +590,7 @@ st_join(Philly_Data.test, tracts17) %>%
   kable(caption = "Test set MAPE by neighborhood racial context")
 
 #MAPE for both regressions by income
-st_join(Philly_Data.test, tracts17) %>% 
+st_join(Philly_Data.test, tracts21) %>% 
   filter(!is.na(incomeContext)) %>%
   group_by(Regression, incomeContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
