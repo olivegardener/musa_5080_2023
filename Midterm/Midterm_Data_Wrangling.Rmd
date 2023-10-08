@@ -190,6 +190,11 @@ st_write(highways, "data/highways.geojson", delete_dsn = TRUE)
 
 st_write(tracts2020, "data/tracts2020.geojson", delete_dsn = TRUE)
 
+
+
+st_write(landuse, "data/landuse.shp", driver = "ESRI Shapefile", delete_dsn = TRUE)
+
+
 ```
 
 

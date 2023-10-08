@@ -40,6 +40,8 @@ library(lubridate)
 library(stargazer)
 library(purrr)
 library(tigris)
+library(extrafont)
+
 
 # Coordinate System
 coordinate_system <- 2272
@@ -186,17 +188,39 @@ model_data <- model_data %>%
 
 ```
 
-### Trees buffer
+### Tree Count
 ```{r buffer}
 
-model_data$trees.buffer <- model_data %>% 
+model_data$tree.count.buffer <- model_data %>% 
     st_buffer(500) %>% 
     aggregate(mutate(trees, counter = 1),., sum) %>%
     pull(counter)
 
 ```
 
+### Tree Canopy Percent in Buffer
+```{r warning = FALSE}
+# # Create buffers around each house
+# HouseBuffers <- st_buffer(model_data, dist = (500))
+# 
+# # Initialize an empty vector to store the canopy coverage percent for each house
+# CanopyPct100ft <- vector("numeric", length = nrow(model_data))
+# 
+# # Loop through each house buffer
+# for (i in 1:nrow(HouseBuffers)) {
+# # Calculate the intersection area between the current house buffer and the tree canopy
+# intersection_area <- sum(st_area(st_intersection(HouseBuffers[i, ], TreeCanopy)))
+# 
+# # Calculate the canopy coverage percent for the current house buffer
+# CanopyPct100ft[i] <- (intersection_area / st_area(HouseBuffers[i, ])) * 100}
+# 
+# # Add the canopy coverage percent values to the Houses data frame
+# model_data$CanopyPctQuMi <- CanopyPct100ft
+model_data <- model_data %>% 
+  mutate(CanopyPctQuMi = 1)
+```
 
+### Impute Values
 ```{r data na remove}
 
 model_data <- model_data %>%
@@ -212,15 +236,17 @@ model_data <- model_data %>%
     MedRent_ACS = ifelse(is.na(MedRent_ACS), median(MedRent_ACS, na.rm = TRUE), MedRent_ACS),
     PctWhite_ACS = ifelse(is.na(PctWhite_ACS), median(PctWhite_ACS, na.rm = TRUE), PctWhite_ACS),
     total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area),
-    trees.buffer = ifelse(is.na(trees.buffer), median(trees.buffer, na.rm = TRUE), trees.buffer),
+    CanopyPctQuMi = ifelse(is.na(CanopyPctQuMi), median(CanopyPctQuMi, na.rm = TRUE), CanopyPctQuMi),
+    tree.count.buffer = ifelse(is.na(tree.count.buffer), median(tree.count.buffer, na.rm = TRUE), tree.count.buffer),
     holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
     age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
     age = ifelse(age<0, 0, age)
   ) %>%
   filter(sale_price < 1500000) # do we like this as filter
 
+glimpse(model_data)
 ```
-
+!!!!!!!!!!convert some dbl factors to int?
 
 Deliverables
 
@@ -266,10 +292,10 @@ ggcorrplot(
 # Home Price Scatterplots
 Example from book for facetwrap scatterplots
 
-```{r scatterplots, fig.width=8, fig.height=8}
+```{r scatterplots, fig.width=6, fig.height=4}
 
 st_drop_geometry(model_data) %>% 
-  select(sale_price, vacant_lots_nn5, playgrounds_nn2, quality_produce_access, trees.buffer) %>%
+  select(sale_price, vacant_lots_nn5, playgrounds_nn2, quality_produce_access, tree.count.buffer) %>%
   gather(Variable, Value, -sale_price) %>% 
    ggplot(aes(Value, sale_price)) +
      geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -285,13 +311,30 @@ Follow book - map quintile breaks over neighborhoods
 ```{r map home prices}
 
 #book used price per square foot
+# ggplot() +
+#   geom_sf(data = neighborhoods, fill = "white") +
+#   geom_sf(data = model_data, aes(colour = q5(sale_price)), 
+#           show.legend = "point", size = .01) +
+#   scale_colour_manual(values = palette_sequential,
+#                    labels=qBr(model_data,"sale_price"),
+#                    name="Quintile\nBreaks") +
+#   labs(title="Sale Price, Philly") +
+#   mapTheme()
+
+
+```
+
+```{r, fig.width=10}
+# Your ggplot code
 ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = model_data, aes(colour = q5(sale_price)), 
-          show.legend = "point", size = .01) +
-  scale_colour_manual(values = palette_sequential,
-                   labels=qBr(model_data,"sale_price"),
-                   name="Quintile\nBreaks") +
+  geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
+          aes(colour = sale_price), 
+          show.legend = "point", size = .001) +
+  scale_colour_gradientn(colors = palette_sequential,
+                         name="Sale Price",
+                         labels = scales::label_number(scale = 1),
+                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5)) +
   labs(title="Sale Price, Philly") +
   mapTheme()
 
@@ -300,7 +343,7 @@ ggplot() +
 
 # 3 Interesting Maps (bonus for something extra engaging)
 
-```{r heatmap1}
+```{r heatmap1, fig.width=10}
 ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   stat_density2d(data = data.frame(st_coordinates(trees)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
@@ -314,7 +357,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
 
 ```
 
-```{r map2}
+```{r map2, fig.width=10}
 ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
   scale_fill_gradient(low = "lavender", high = "purple", name = "Store Count")+
   labs(title = "High Quality Produce Access, Philly",
@@ -323,7 +366,7 @@ ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
 
 ```
 
-```{r map3}
+```{r map3, fig.width=6, fig.height=4}
 
 playgrounds <- playgrounds %>%
   select(OBJECTID, geometry)
@@ -358,8 +401,9 @@ summary(regression)
 # Table of Results (Training Set)
 ### remove challenge data, split into training and test sets
 
-```{r regression training set}
+```{r regression training set, warning=FALSE}
 inTrain <- createDataPartition(
+              # y = paste(Philly_Data),
               y = paste(Philly_Data$district),
               p = .60, list = FALSE)
 Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
@@ -389,6 +433,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 st_drop_geometry(Philly_Data.test) %>%
   gather(Variable, Value, -Regression, -district) %>%
+  # gather(Variable, Value, -Regression) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
   group_by(Regression, Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
@@ -489,31 +534,31 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 UPDATE!!!!!
 ```{r pred map}
 
-Philly_Data.challenge <- model_data %>%
-  filter(toPredict == "CHALLENGE",
-         age < 500,
-         sale_price < 2000000) %>%
-  dplyr::select(-toPredict, -dining,)
-
-Philly_Data.predict <- rbind(Philly_Data, Philly_Data.challenge)
-
-Philly_Data.challenge <-
-  Philly_Data.challenge %>%
-  mutate(Regression = "Regression",
-         sale_price.Predict = predict(reg.training, Philly_Data.predict),
-         sale_price.Error = sale_price.Predict - sale_price,
-         sale_price.AbsError = abs(sale_price.Predict - sale_price),
-         sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
-
-ggplot( )+
-  geom_sf(data = neighborhoods, fill = "grey40") +
-  geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Predict)), 
-          show.legend = "point", size = .01) +
-  scale_colour_manual(values = palette_sequential,
-                   labels=qBr(Philly_Data.test,"sale_price"),
-                   name="Quintile\nBreaks") +
-  labs(title="Sale Price, Philly") +
-  mapTheme()
+# Philly_Data.challenge <- model_data %>%
+#   filter(toPredict == "CHALLENGE",
+#          age < 500,
+#          sale_price < 2000000) %>%
+#   dplyr::select(-toPredict, -dining,)
+# 
+# Philly_Data.predict <- rbind(Philly_Data, Philly_Data.challenge)
+# 
+# Philly_Data.challenge <-
+#   Philly_Data.challenge %>%
+#   mutate(Regression = "Regression",
+#          sale_price.Predict = predict(reg.training, Philly_Data.predict),
+#          sale_price.Error = sale_price.Predict - sale_price,
+#          sale_price.AbsError = abs(sale_price.Predict - sale_price),
+#          sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
+# 
+# ggplot( )+
+#   geom_sf(data = neighborhoods, fill = "grey40") +
+#   geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Predict)), 
+#           show.legend = "point", size = .01) +
+#   scale_colour_manual(values = palette_sequential,
+#                    labels=qBr(Philly_Data.test,"sale_price"),
+#                    name="Quintile\nBreaks") +
+#   labs(title="Sale Price, Philly") +
+#   mapTheme()
 
 ```
 
@@ -542,7 +587,7 @@ neighborhoods <- neighborhoods %>%
 
 MAPE.Map <- ggplot() + 
   geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-  scale_fill_gradient(low = "blue", high = "red",
+  scale_fill_gradient(low = "lightgreen", high = "red",
                         name = "MAPE") +
   labs(title = "Mean test set MAPE by neighborhood") +
   mapTheme()
@@ -550,9 +595,39 @@ MAPE.Map <- ggplot() +
 MAPE.Map
 
 ```
+This shows that the model is good at predicting across much of the city, with errors clustered in a small handful of errors. Why is the absolute percent error so high in these neighborhoods?
+
 
 # Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
 OLIVER
+```{r}
+
+# Calculate mean price by neighborhood
+mean_price_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
+  group_by(neighborhood) %>%
+  summarise(mean_price = mean(sale_price, na.rm = TRUE)) %>%
+  ungroup()
+
+# Merge mean_price_by_neighborhood and mean_MAPE_by_neighborhood
+neighborhood_summary <- left_join(mean_price_by_neighborhood, mean_MAPE_by_neighborhood, by = "neighborhood")
+
+# Create a scatterplot of MAPE by neighborhood as a function of mean price by neighborhood
+scatterplot <- ggplot(neighborhood_summary, aes(x = mean_price, y = mean.MAPE)) +
+  geom_point(aes(color = mean.MAPE), size = 3) +
+  scale_color_gradient(low = "green", high = "red") +
+  labs(
+    title = "Scatterplot of MAPE by Neighborhood as a Function of Mean Price",
+    x = "Mean Price by Neighborhood",
+    y = "Mean MAPE by Neighborhood",
+    color = "MAPE"
+  ) +
+  theme_minimal()
+
+# Display the scatterplot
+print(scatterplot)
+
+
+```
 
 
 # Split by Census Groups
