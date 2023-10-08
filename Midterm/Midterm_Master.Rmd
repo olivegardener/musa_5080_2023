@@ -145,7 +145,7 @@ model_data <- model_data %>%
           st_join(dplyr::select(redlining, holc_grade_val)) %>%
           # st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
           st_join(dplyr::select(neighborhoods, NAME)) %>%
-          st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_RESTAURANTS)) %>% #HPSS is high produce supply store
+          st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_LPSS)) %>% #HPSS is high produce supply store
           st_join(dplyr::select(tracts2020, MedHHInc, PctWhite, PctBach)) %>%
           rename(
                  MedHHInc_ACS = MedHHInc,
@@ -153,7 +153,7 @@ model_data <- model_data %>%
                  PctBach_ACS = PctBach,
                  neighborhood = NAME,
                  quality_produce_access = TOTAL_HPSS,
-                 low_produce_access = TOTAL_LPSS )%>% 
+                 low_produce_access = TOTAL_LPSS)%>% 
           mutate(PctWhite_ACS = PctWhite_ACS*100,
                  PctBach_ACS = PctBach_ACS*100,
                  holc_grade_val = as.numeric(holc_grade_val)
@@ -183,9 +183,6 @@ model_data <- model_data %>%
       vacant_lots_nn3 = nn_function(st_coordinates(model_data), 
                                     st_coordinates(st_centroid(vacant_lots)), 
                                     k = 3),
-      playgrounds_nn2 = nn_function(st_coordinates(model_data), 
-                                    st_coordinates(st_centroid(playgrounds)), 
-                                    k = 2),
       )
 
 ```
@@ -212,9 +209,7 @@ model_data <- model_data %>%
     number_of_bedrooms = ifelse(is.na(number_of_bedrooms), median(number_of_bedrooms, na.rm = TRUE), number_of_bedrooms),
     fireplaces = ifelse(is.na(fireplaces), median(fireplaces, na.rm = TRUE), fireplaces),
     quality_produce_access = ifelse(is.na(quality_produce_access), median(quality_produce_access, na.rm = TRUE), quality_produce_access),
-    dining = ifelse(is.na(dining), median(dining, na.rm = TRUE), dining),
     MedHHInc_ACS = ifelse(is.na(MedHHInc_ACS), median(MedHHInc_ACS, na.rm = TRUE), MedHHInc_ACS),
-    MedRent_ACS = ifelse(is.na(MedRent_ACS), median(MedRent_ACS, na.rm = TRUE), MedRent_ACS),
     PctWhite_ACS = ifelse(is.na(PctWhite_ACS), median(PctWhite_ACS, na.rm = TRUE), PctWhite_ACS),
     total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area),
     tree.count.buffer = ifelse(is.na(tree.count.buffer), median(tree.count.buffer, na.rm = TRUE), tree.count.buffer),
@@ -231,7 +226,6 @@ model_data <- model_data %>%
 
 glimpse(model_data)
 ```
-!!!!!!!!!!convert some dbl factors to int?
 
 Deliverables
 
@@ -280,7 +274,7 @@ Example from book for facetwrap scatterplots
 ```{r scatterplots, fig.width=6, fig.height=4}
 
 st_drop_geometry(model_data) %>% 
-  select(sale_price, vacant_lots_nn3, playgrounds_nn2, quality_produce_access, tree.count.buffer) %>%
+  select(sale_price, vacant_lots_nn3, dist2park, quality_produce_access, tree.count.buffer) %>%
   gather(Variable, Value, -sale_price) %>% 
    ggplot(aes(Value, sale_price)) +
      geom_point(size = .01) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -292,27 +286,10 @@ st_drop_geometry(model_data) %>%
 
 # Map Home Prices
 
-Follow book - map quintile breaks over neighborhoods 
-```{r map home prices}
-
-#book used price per square foot
-# ggplot() +
-#   geom_sf(data = neighborhoods, fill = "white") +
-#   geom_sf(data = model_data, aes(colour = q5(sale_price)), 
-#           show.legend = "point", size = .01) +
-#   scale_colour_manual(values = palette_sequential,
-#                    labels=qBr(model_data,"sale_price"),
-#                    name="Quintile\nBreaks") +
-#   labs(title="Sale Price, Philly") +
-#   mapTheme()
-
-
-```
-
 ```{r, fig.width=10}
 salepricemap <- ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = model_data), 
+  geom_sf(data = model_data, 
           aes(colour = sale_price), 
           show.legend = "point", size = .001) +
   scale_colour_gradientn(colors = palette_sequential,
@@ -327,19 +304,6 @@ salepricemap
 ```
 
 # 3 Interesting Maps (bonus for something extra engaging)
-```{r heatmap1, fig.width=10}
-# ggplot() + geom_sf(data = neighborhoods, fill = "white") +
-#   stat_density2d(data = data.frame(st_coordinates(trees2)), 
-#                  aes(X, Y, fill = ..level.., alpha = ..level.., weight = trees2$TREE_DBH),
-#                  size = 0.01, bins = 40, geom = 'polygon') +
-#   scale_fill_gradient(low = "lightgreen", high = "darkgreen", 
-#                       breaks=c(0.000000003,0.00000003),
-#                       labels=c("Minimum","Maximum"), name = "Density") +
-#   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-#   labs(title = "Weighted Density of Trees, Philly") +
-#   mapTheme()
-
-```
 
 ```{r heatmap1, fig.width=10}
 ggplot() + geom_sf(data = neighborhoods, fill = "white") +
@@ -364,6 +328,26 @@ ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
 
 ```
 
+```{r}
+# Extracting centroids and converting to data.frame
+centroids <- st_centroid(vacant_lots)
+centroids_df <- data.frame(st_coordinates(centroids))
+
+# Plotting
+ggplot() + 
+  geom_sf(data = neighborhoods, fill = "white") +
+  stat_density2d(data = centroids_df, 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "pink", high = "red", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Vacant Lots, Philly") +
+  theme_minimal()
+```
+
+
 ```{r, fig.width=10}
 ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
@@ -380,6 +364,8 @@ ggplot() +
 
 
 ```
+This appears to correlate spatially with the more expensive homes in the northeast and northwest of the city, but given the high levels of vacanct lots in center city
+
 
 ```{r map3, fig.width=6, fig.height=4}
 
