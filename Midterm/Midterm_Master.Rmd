@@ -105,14 +105,6 @@ trees <- st_read("data/trees.geojson") %>%
   st_transform(crs = coordinate_system) %>% 
   dplyr::select(-TREE_NAME, -TREE_DBH, -YEAR)
 
-# Change crs to include
-trees2 <- st_read("data/trees_OA.geojson") %>%
-  na.omit() %>%
-  st_as_sf(coords = c("LOC_X", "LOC_Y"), crs = "EPSG:4326") %>%
-  st_transform(crs = coordinate_system) %>%
-  st_intersection(philly_outline, trees2) %>%
-  dplyr::select(-TREE_NAME, -LOC_Y, -LOC_X)
-
 septa <- st_read("data/septa.geojson") %>% 
   st_transform(crs = coordinate_system)
 light_rail <- septa %>% 
@@ -468,20 +460,6 @@ Philly_Data.test %>%
 DAVE
 
 ```{r residuals plot, fig.width=10}
-# Example: Creating three equal-width bins
-Philly_Data.test$sale_price.Error.Bin <- cut(Philly_Data.test$sale_price.Error, 
-                                             breaks = 3, 
-                                             labels = c("Low", "Medium", "High"))
-
-ggplot() +
-  geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = Philly_Data.test, 
-          aes(fill = sale_price.Error.Bin),  # Use the binned variable
-          size = .01, alpha = .8) +
-  scale_fill_manual(values = c("Low" = "red", "Medium" = "yellow", "High" = "blue"), 
-                    name = "Residuals") +
-  labs(title = "Binned Residuals of Sale Price Error") +
-  mapTheme()
 
 ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
@@ -533,8 +511,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 ```{r pred map, fig.width=10}
 
 # Ensure that 'Philly_Data.challenge' only contains the observations you want to predict
-Philly_Data.challenge <- model_data %>%
-  dplyr::select(-toPredict)
+Philly_Data.challenge <- model_data
 
 # Generate predictions only for 'Philly_Data.challenge'
 Philly_Data.challenge <- Philly_Data.challenge %>%
@@ -573,6 +550,16 @@ predictedsalepricemap <- ggplot() +
 
 # Arrange the plots side by side
 grid.arrange(salepricemap, predictedsalepricemap, ncol=2)
+
+```
+
+```{r export csv}
+Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
+  filter(toPredict == "CHALLENGE") %>%
+  dplyr::select(musaID, sale_price_prediction) %>%
+  mutate(teamName = "House It Going")
+
+write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
 
 ```
 
