@@ -231,6 +231,7 @@ Deliverables
 
 # Introduction
 
+
 # Summary Statistics
 
 ```{r stargazer table}
@@ -364,33 +365,15 @@ ggplot() +
 
 
 ```
-This appears to correlate spatially with the more expensive homes in the northeast and northwest of the city, but given the high levels of vacanct lots in center city
+This appears to correlate spatially with the more expensive homes in the northeast and northwest of the city, but given the high levels of vacant lots in center city, which coincide with high housing prices, this may not be the best predictor
 
-
-```{r map3, fig.width=6, fig.height=4}
-
-playgrounds <- playgrounds %>%
-  select(OBJECTID, geometry)
-
-neighborhoods$playground_count <- neighborhoods %>% 
-    aggregate(mutate(playgrounds, counter = 1),., sum) %>%
-    pull(counter)
-
-ggplot() + geom_sf(data = neighborhoods, aes(fill = playground_count))+
-  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
-  labs(title = "Playgrounds per Neighborhood, Philly",
-       subtitle = "Philly Parks and Rec Sites",
-       legend = "Count") +
-  mapTheme()
-
-```
 
 ```{r regression}
 
 Philly_Data <- model_data %>%
   filter(toPredict == "MODELLING",
          age < 500) %>%
-  dplyr::select(-toPredict, -dining,)
+  dplyr::select(-toPredict,)
 
 regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(Philly_Data)))
 
@@ -403,9 +386,8 @@ summary(regression)
 
 ```{r regression training set, warning=FALSE}
 inTrain <- createDataPartition(
-              # y = paste(Philly_Data$district),
               y = paste(Philly_Data$neighborhood),
-              p = .60, list = FALSE)
+              p = .70, list = FALSE)
 Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
 Philly_Data.test <- Philly_Data[-inTrain,]  
  
@@ -433,7 +415,7 @@ st_drop_geometry(Philly_Data.test) %>%
 st_drop_geometry(Philly_Data.test) %>%
   gather(Variable, Value, -neighborhood) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
-  group_by(Regression, Variable) %>%
+  group_by(Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
     spread(Variable, meanValue) %>%
     kable()
@@ -442,7 +424,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 # CV Results
 
-```{r cross validation}
+```{r cross validation, warning-FALSE}
 
 fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
@@ -462,12 +444,10 @@ ggplot()+
 
 # Pred vs Obs Scatterplot
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!edit wording
-
 ```{r pred and obs}
 
 Philly_Data.test %>%
-  dplyr::select(sale_price.Predict, sale_price, Regression) %>%
+  dplyr::select(sale_price.Predict, sale_price) %>%
     ggplot(aes(sale_price, sale_price.Predict)) +
   geom_point() +
   stat_smooth(aes(sale_price.Predict, sale_price), 
@@ -480,6 +460,8 @@ Philly_Data.test %>%
 
 ```
 
+
+
 # Residuals Map w/ Moran's I
 DAVE
 
@@ -489,7 +471,7 @@ DAVE
 ggplot()+
   geom_sf(data=neighborhoods, fill = "white")+
   geom_sf(data=Philly_Data.test, aes(color = sale_price.Error), size = .01, alpha = .8)+
-  scale_color_gradient(low = "red", high = "yellow", name = "Residuals") + 
+  scale_color_gradient(low = "red", high = "blue", name = "Residuals") + 
   mapTheme()
 
 ```
@@ -537,7 +519,7 @@ Philly_Data.challenge <- model_data %>%
   # filter(toPredict == "CHALLENGE",
   #        age < 500,
   #        sale_price < 2000000) %>%
-  dplyr::select(-toPredict, -dining)
+  dplyr::select(-toPredict)
 
 # Generate predictions only for 'Philly_Data.challenge'
 Philly_Data.challenge <- Philly_Data.challenge %>%
