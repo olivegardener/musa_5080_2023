@@ -209,6 +209,7 @@ model_data <- model_data %>%
     number_of_bedrooms = ifelse(is.na(number_of_bedrooms), median(number_of_bedrooms, na.rm = TRUE), number_of_bedrooms),
     fireplaces = ifelse(is.na(fireplaces), median(fireplaces, na.rm = TRUE), fireplaces),
     quality_produce_access = ifelse(is.na(quality_produce_access), median(quality_produce_access, na.rm = TRUE), quality_produce_access),
+    low_produce_access = ifelse(is.na(low_produce_access), median(low_produce_access, na.rm = TRUE), low_produce_access),
     MedHHInc_ACS = ifelse(is.na(MedHHInc_ACS), median(MedHHInc_ACS, na.rm = TRUE), MedHHInc_ACS),
     PctWhite_ACS = ifelse(is.na(PctWhite_ACS), median(PctWhite_ACS, na.rm = TRUE), PctWhite_ACS),
     total_area = ifelse(is.na(total_area), median(total_area, na.rm = TRUE), total_area),
@@ -224,7 +225,7 @@ model_data <- model_data %>%
     filter(sale_price < quantile(sale_price, 0.99))
 
 
-glimpse(model_data)
+summary(model_data)
 ```
 
 Deliverables
