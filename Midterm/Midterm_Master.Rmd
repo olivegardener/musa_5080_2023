@@ -466,13 +466,20 @@ Philly_Data.test %>%
 # Residuals Map w/ Moran's I
 DAVE
 
-
 ```{r residuals plot, fig.width=10}
+# Example: Creating three equal-width bins
+Philly_Data.test$sale_price.Error.Bin <- cut(Philly_Data.test$sale_price.Error, 
+                                             breaks = 3, 
+                                             labels = c("Low", "Medium", "High"))
 
-ggplot()+
-  geom_sf(data=neighborhoods, fill = "white")+
-  geom_sf(data=Philly_Data.test, aes(color = sale_price.Error), size = .01, alpha = .8)+
-  scale_color_gradient(low = "red", high = "blue", name = "Residuals") + 
+ggplot() +
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = Philly_Data.test, 
+          aes(fill = sale_price.Error.Bin),  # Use the binned variable
+          size = .01, alpha = .8) +
+  scale_fill_manual(values = c("Low" = "red", "Medium" = "yellow", "High" = "blue"), 
+                    name = "Residuals") +
+  labs(title = "Binned Residuals of Sale Price Error") +
   mapTheme()
 
 ```
@@ -512,14 +519,10 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 ```
 # Predicted Map (Test Set)
 
-UPDATE!!!!!
 ```{r pred map, fig.width=10}
 
 # Ensure that 'Philly_Data.challenge' only contains the observations you want to predict
 Philly_Data.challenge <- model_data %>%
-  # filter(toPredict == "CHALLENGE",
-  #        age < 500,
-  #        sale_price < 2000000) %>%
   dplyr::select(-toPredict)
 
 # Generate predictions only for 'Philly_Data.challenge'
@@ -610,7 +613,7 @@ neighborhood_summary <- left_join(mean_price_by_neighborhood, mean_MAPE_by_neigh
 # Create a scatterplot of MAPE by neighborhood as a function of mean price by neighborhood
 scatterplot <- ggplot(neighborhood_summary, aes(x = mean_price, y = mean.MAPE)) +
   geom_point(aes(color = mean.MAPE), size = 1) +
-  scale_color_gradient(low = "green", high = "red") +
+  scale_color_gradient(low = "lightgreen", high = "red") +
   labs(
     title = "Scatterplot of MAPE by Neighborhood as a Function of Mean Price",
     x = "Mean Price by Neighborhood",
@@ -654,7 +657,7 @@ grid.arrange(ncol = 2,
 
 #MAPE for both regressions by race
 st_join(Philly_Data.test, tracts21) %>% 
-  group_by(Regression, raceContext) %>%
+  group_by(raceContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(raceContext, mean.MAPE) %>%
@@ -663,7 +666,7 @@ st_join(Philly_Data.test, tracts21) %>%
 #MAPE for both regressions by income
 st_join(Philly_Data.test, tracts21) %>% 
   filter(!is.na(incomeContext)) %>%
-  group_by(Regression, incomeContext) %>%
+  group_by(incomeContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(incomeContext, mean.MAPE) %>%
