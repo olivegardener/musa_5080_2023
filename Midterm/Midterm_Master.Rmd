@@ -50,6 +50,7 @@ options(scipen = 999)
 
 Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 
+palette5 <- c("red", "pink", "grey",   "lightblue", "blue")
 palette_sequential <- c("#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026")
 palette_diverging <- c("#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99")
 palette_three <- c("#e66101", "#f7f7f7", "#5e3c99")
@@ -475,6 +476,16 @@ ggplot()+
   scale_color_gradient(low = "red", high = "blue", name = "Residuals") + 
   mapTheme()
 
+ggplot() +
+  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Error)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   
+                   name="Quintile\nBreaks") +
+  labs(title="Residuals, Philly") +
+  mapTheme()
+
 ```
   
 
@@ -631,9 +642,9 @@ print(scatterplot)
 Example from book
 
 ```{r tracts}
-tracts21 <- 
+tracts20 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E","B06011_001"), 
-          year = 2021, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
+          year = 2020, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
   st_transform(crs=2272)  %>%
   rename(TotalPop = B01001_001E,
          NumberWhites = B01001A_001E,
@@ -643,27 +654,27 @@ tracts21 <-
          incomeContext = ifelse(Median_Income > 32322, "High Income", "Low Income"))
 
 grid.arrange(ncol = 2,
-  ggplot() + geom_sf(data = na.omit(tracts21), aes(fill = raceContext)) +
+  ggplot() + geom_sf(data = na.omit(tracts20), aes(fill = raceContext)) +
     scale_fill_manual(values = c("#FA7800", "#25CB10"), name="Race Context") +
     labs(title = "Race Context") +
     mapTheme() + theme(legend.position="bottom"), 
-  ggplot() + geom_sf(data = na.omit(tracts21), aes(fill = incomeContext)) +
+  ggplot() + geom_sf(data = na.omit(tracts20), aes(fill = incomeContext)) +
     scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
     labs(title = "Income Context") +
     mapTheme() + theme(legend.position="bottom"))
 
 #MAPE for both regressions by race
-st_join(Philly_Data.test, tracts21) %>% 
-  group_by(Regression, raceContext) %>%
+st_join(Philly_Data.test, tracts20) %>% 
+  group_by(raceContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(raceContext, mean.MAPE) %>%
   kable(caption = "Test set MAPE by neighborhood racial context")
 
 #MAPE for both regressions by income
-st_join(Philly_Data.test, tracts21) %>% 
+st_join(Philly_Data.test, tracts20) %>% 
   filter(!is.na(incomeContext)) %>%
-  group_by(Regression, incomeContext) %>%
+  group_by(incomeContext) %>%
   summarize(mean.MAPE = scales::percent(mean(sale_price.APE, na.rm = T))) %>%
   st_drop_geometry() %>%
   spread(incomeContext, mean.MAPE) %>%
