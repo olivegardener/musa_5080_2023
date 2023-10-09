@@ -373,7 +373,9 @@ reg.training %>%
   tbl_regression(intercept = TRUE) %>%
   modify_column_hide(column = ci) %>%
   modify_column_unhide(column = std.error) %>%
-  bold_p(t = 0.05)
+  kbl() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "200px",
+             fixed_thead = FALSE)
 ```
 
 ## Table of Goodness of Fit (Test Data)
@@ -395,8 +397,8 @@ st_drop_geometry(Philly_Data.test) %>%
   filter(Variable == "sale_price.AbsError" | Variable == "sale_price.APE") %>%
   group_by(Variable) %>%
     summarize(meanValue = mean(Value, na.rm = T)) %>%
-    spread(Variable, meanValue) %>%
-    kable()
+    spread(Variable, meanValue) %>% kbl(col.names = c('Sale Price Mean Absolute Error', 'Sale Price APE'), digits = 3, format.args = list(big.mark = ",")) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
 ```
 
 
@@ -537,12 +539,12 @@ predictedsalepricemap <- ggplot() +
 predictedsalepricemap
 
 # export sales price predictions for challenge data to csv
-Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
-  filter(toPredict == "CHALLENGE") %>%
-  dplyr::select(musaID, sale_price_prediction) %>%
-  mutate(teamName = "House It Going")
-
-write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
+# Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
+#   filter(toPredict == "CHALLENGE") %>%
+#   dplyr::select(musaID, sale_price_prediction) %>%
+#   mutate(teamName = "House It Going")
+# 
+# write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
 
 ```
 
