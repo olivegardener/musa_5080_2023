@@ -314,6 +314,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white") +
   mapTheme()
 
 ```
+This density plot of trees appears to line up with the higher sale price areas, particularly the one in downtown.
 
 ```{r map2, fig.width=10}
 ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
@@ -340,7 +341,7 @@ ggplot() +
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
   labs(title = "Density of Vacant Lots, Philly") +
-  theme_minimal()
+  mapTheme()
 ```
 
 
@@ -573,14 +574,12 @@ Example from book
 # Spatial join
 Philly_Data.test <- st_join(Philly_Data.test, neighborhoods, join = st_within)
 
-
 # Grouping and summarization
 mean_MAPE_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
   group_by(neighborhood) %>%
   summarise(mean.MAPE = mean(sale_price.APE, na.rm = TRUE)) %>%
   ungroup()
 
-# Ensure that "neighborhood" in mean_MAPE_by_neighborhood matches the identifier in neighborhoods
 neighborhoods <- neighborhoods %>%
   left_join(mean_MAPE_by_neighborhood, by = c("NAME" = "neighborhood"))
 
@@ -595,7 +594,29 @@ MAPE.Map <- ggplot() +
 MAPE.Map
 
 ```
+
 This shows that the model is good at predicting across much of the city, with errors clustered in one neighborhood. Why is the absolute percent error so high in that neighborhood?
+```{r}
+
+# Grouping and summarization
+HouseCount_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
+  group_by(neighborhood) %>%
+  summarise(HouseCount = n()) %>% 
+  ungroup()
+
+neighborhoods <- neighborhoods %>%
+  left_join(HouseCount_by_neighborhood, by = c("NAME" = "neighborhood"))
+
+
+HouseCount.Map <- ggplot() + 
+  geom_sf(data = neighborhoods, aes(fill = HouseCount)) +
+  scale_fill_gradient(low = "lightblue", high = "red",
+                        name = "House Count") +
+  labs(title = "Number of Houses Per Neighborhood") +
+  mapTheme()
+
+HouseCount.Map
+```
 
 
 # Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
