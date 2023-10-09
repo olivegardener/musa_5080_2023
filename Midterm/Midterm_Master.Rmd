@@ -312,6 +312,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   mapTheme()
 
 ```
+This density plot of trees appears to line up with the higher sale price areas, particularly the one in downtown.
 
 ### High Quality Produce Access
 ```{r map2, fig.width=15}
@@ -338,8 +339,8 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
   labs(title = "Density of Vacant Lot Locations") +
   mapTheme()
-
 ```
+
 
 This appears to correlate spatially with the more expensive homes in the northeast and northwest of the city, but given the high levels of vacant lots in center city, which coincide with high housing prices, this may not be the best predictor
 
@@ -551,14 +552,12 @@ write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
 # Spatial join
 Philly_Data.test <- st_join(Philly_Data.test, neighborhoods, join = st_within)
 
-
 # Grouping and summarization
 mean_MAPE_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
   group_by(neighborhood) %>%
   summarise(mean.MAPE = mean(sale_price.APE, na.rm = TRUE)) %>%
   ungroup()
 
-# Ensure that "neighborhood" in mean_MAPE_by_neighborhood matches the identifier in neighborhoods
 neighborhoods <- neighborhoods %>%
   left_join(mean_MAPE_by_neighborhood, by = c("NAME" = "neighborhood"))
 
@@ -573,7 +572,29 @@ MAPE.Map <- ggplot() +
 MAPE.Map
 
 ```
+
 This shows that the model is good at predicting across much of the city, with errors clustered in one neighborhood. Why is the absolute percent error so high in that neighborhood?
+```{r}
+
+# Grouping and summarization
+HouseCount_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
+  group_by(neighborhood) %>%
+  summarise(HouseCount = n()) %>% 
+  ungroup()
+
+neighborhoods <- neighborhoods %>%
+  left_join(HouseCount_by_neighborhood, by = c("NAME" = "neighborhood"))
+
+
+HouseCount.Map <- ggplot() + 
+  geom_sf(data = neighborhoods, aes(fill = HouseCount)) +
+  scale_fill_gradient(low = "lightblue", high = "red",
+                        name = "House Count") +
+  labs(title = "Number of Houses Per Neighborhood") +
+  mapTheme()
+
+HouseCount.Map
+```
 
 
 ## Mean Absolute Percent Error by Neighborhood Mean Price Scatterplot
