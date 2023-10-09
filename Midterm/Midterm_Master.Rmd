@@ -2,13 +2,21 @@
 title: "PPA_Midterm"
 author: "Oliver Atwood + Dave Drennan"
 date: "2023-10-11"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    number_sections: yes
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
-```{r, include=FALSE}
+```{r packages, include=FALSE}
 rm(list=ls())
 
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -41,6 +49,7 @@ library(stargazer)
 library(purrr)
 library(tigris)
 library(extrafont)
+library(gtsummary)
 
 
 # Coordinate System
@@ -56,17 +65,21 @@ palette_diverging <- c("#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99")
 palette_three <- c("#e66101", "#f7f7f7", "#5e3c99")
 
 ```
+# Introduction
 
-### Load studentData
-```{r warning=FALSE}
+
+
+# Data
+
+## Loading Data
+
+```{r load data, results = "hide", fig.show='hide'}
+# provided data
 
 student_data <- st_read("data/studentData.geojson") %>% 
   st_transform(crs = coordinate_system) 
 
-```
-
-## Read wrangled data
-```{r, message=FALSE}
+# wrangled data
 
 philly_outline <- counties(state = "PA") %>% 
   filter(NAME == "Philadelphia") %>% 
@@ -125,8 +138,11 @@ rail_stops <- st_join(light_rail, regional_rail)
 
 ```
 
-### Extract polygon data to points
-```{r}
+### Feature Engineering
+
+```{r feature engineering}
+
+# extract polygon data to points
 
 model_data <- student_data %>% 
   dplyr::select(musaID, toPredict, sale_price, exterior_condition, fireplaces, interior_condition, number_of_bathrooms, number_of_bedrooms,
@@ -136,15 +152,12 @@ model_data <- student_data %>%
 
 model_data <- model_data %>% 
           st_join(dplyr::select(redlining, holc_grade_val)) %>%
-          # st_join(dplyr::select(planning_districts, DIST_NAME)) %>%
-          st_join(dplyr::select(neighborhoods, NAME)) %>%
-          st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_LPSS)) %>% #HPSS is high produce supply store
+          st_join(dplyr::select(food_access, TOTAL_HPSS, TOTAL_LPSS)) %>% #HPSS is high produce supply store, LPSS is low produce
           st_join(dplyr::select(tracts2020, MedHHInc, PctWhite, PctBach)) %>%
           rename(
                  MedHHInc_ACS = MedHHInc,
                  PctWhite_ACS = PctWhite,
                  PctBach_ACS = PctBach,
-                 neighborhood = NAME,
                  quality_produce_access = TOTAL_HPSS,
                  low_produce_access = TOTAL_LPSS)%>% 
           mutate(PctWhite_ACS = PctWhite_ACS*100,
@@ -152,22 +165,14 @@ model_data <- model_data %>%
                  holc_grade_val = as.numeric(holc_grade_val)
                  )
 
-# Sample Data for testing
-# n_sample <- round(nrow(model_data) * 0.1)
-# model_data <- model_data[sample(nrow(model_data), n_sample), ]
+# min distance to parks
 
-```
-
-### Minimum distance
-```{r minimum distance}
-# Parks
 distances <- st_distance(model_data, parks)
 min_distances <- apply(distances, 1, min)
 model_data$dist2park <- min_distances
-```
 
-### K nearest neighbors
-```{r k nearest neighbors, warning=FALSE}
+# K nearest neighbors
+
 model_data <- model_data %>%
     mutate(
       rail_stop_nn1 = nn_function(st_coordinates(model_data), 
@@ -178,21 +183,14 @@ model_data <- model_data %>%
                                     k = 3),
       )
 
-```
-
-### Tree Count
-```{r buffer}
+# tree count buffers
 
 model_data$tree.count.buffer <- model_data %>% 
     st_buffer(500) %>% 
     aggregate(mutate(trees, counter = 1),., sum) %>%
     pull(counter)
 
-```
-
-
-### Impute Values
-```{r data na remove}
+# imputing missing values
 
 model_data <- model_data %>%
   mutate(
@@ -210,7 +208,6 @@ model_data <- model_data %>%
     holc_grade_val = ifelse(is.na(holc_grade_val), median(holc_grade_val, na.rm = TRUE), holc_grade_val),
     age = ifelse(is.na(age), median(age, na.rm = TRUE), age),
     age = ifelse(age<0, 0, age),
-    neighborhood = as.factor(neighborhood),
     exterior_condition = as.integer(exterior_condition),
     number_of_bathrooms = as.integer(number_of_bathrooms),
     holc_grade_val = as.integer(holc_grade_val),
@@ -218,15 +215,15 @@ model_data <- model_data %>%
     filter(sale_price < quantile(sale_price, 0.99))
 
 
-summary(model_data)
+model_data <- model_data %>%
+  st_join(dplyr::select(neighborhoods, NAME))  %>%
+  rename(neighborhood = NAME) %>%
+  mutate(neighborhood = as.factor(neighborhood))
+
+
 ```
 
-Deliverables
-
-# Introduction
-
-
-# Summary Statistics
+## Summary Statistics
 
 ```{r stargazer table}
 
@@ -242,7 +239,7 @@ stargazer(model_data_df, type = "text", title = "Table 1: Summary Statistics")
 ```
 
 ## Correlation matrix
-```{r correlation matrix, fig.width=14}
+```{r correlation matrix, fig.width=15, fig.height=15}
 # Select variables of interest and convert them to numeric
 vars_of_interest <- select_if(st_drop_geometry(model_data), is.numeric) %>% 
   select(-musaID) %>% 
@@ -263,10 +260,9 @@ ggcorrplot(
 ```
 
 
-# Home Price Scatterplots
-Example from book for facetwrap scatterplots
+## Home Price Correlation Scatterplots
 
-```{r scatterplots, fig.width=6, fig.height=4}
+```{r scatterplots, fig.width=10, fig.height=10}
 
 st_drop_geometry(model_data) %>% 
   select(sale_price, vacant_lots_nn3, dist2park, quality_produce_access, tree.count.buffer) %>%
@@ -278,11 +274,12 @@ st_drop_geometry(model_data) %>%
      plotTheme()
 
 ```
+
 These scatterplots show the expected correlations for each of these variables. There is a slight negative correlation between distance to park and sale price, meaning that generally speaking, the closer a house is to a park, the higher its sale price. For tree.count.buffer, vacant_lots_nn3, and quality_produce_access, these scatterplots show a positive correlation with sale_price, meaning that in general the more trees near a given house, the farther it is from the nearest three vacant lots, and the closer it is to  quality produce, the higher its expected sale price.
 
-# Map Home Prices
+## Map of Home Prices
 
-```{r, fig.width=10}
+```{r, fig.width=15}
 salepricemap <- ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
   geom_sf(data = model_data, 
@@ -299,101 +296,87 @@ salepricemap
 
 ```
 
-# 3 Interesting Maps (bonus for something extra engaging)
+## Maps of Independent Variables
 
-```{r heatmap1, fig.width=10}
-ggplot() + geom_sf(data = neighborhoods, fill = "white") +
+### Tree Density
+```{r map1, fig.width=15}
+
+ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   stat_density2d(data = data.frame(st_coordinates(trees)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "lightgreen", high = "darkgreen", 
-                      breaks=c(0.000000003,0.00000003),
-                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen",
+                      name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Trees, Philly") +
+  labs(title = "Density of Tree Locations") +
   mapTheme()
 
 ```
 
-```{r map2, fig.width=10}
-ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS))) +
+### High Quality Produce Access
+```{r map2, fig.width=15}
+ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS)), color = "grey80") +
   scale_fill_gradient(low = "lavender", high = "purple", name = "Store Count")+
-  labs(title = "High Quality Produce Access, Philly",
+  labs(title = "High Quality Produce Access by Store Count",
        subtitle = "Data provided per block group") +
   mapTheme()
 
 ```
 
-```{r}
+### Vacant Lot Density
+```{r map3, fig.width=15}
 # Extracting centroids and converting to data.frame
 centroids <- st_centroid(vacant_lots)
 centroids_df <- data.frame(st_coordinates(centroids))
 
-# Plotting
-ggplot() + 
-  geom_sf(data = neighborhoods, fill = "white") +
+ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   stat_density2d(data = centroids_df, 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "pink", high = "red", 
-                      breaks=c(0.000000003,0.00000003),
-                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_fill_gradient(low = "pink", high = "red",
+                      name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Vacant Lots, Philly") +
-  theme_minimal()
-```
-
-
-```{r, fig.width=10}
-ggplot() +
-  geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = model_data %>% filter(vacant_lots_nn3 < quantile(vacant_lots_nn3, 0.99)), 
-          aes(colour = vacant_lots_nn3), 
-          show.legend = "point", size = .001) +
-  scale_colour_gradientn(colors = palette_sequential,
-                         name="Vacant Lot Proximity",
-                         labels = scales::label_number(scale = 1),
-                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
-                         trans = "reverse") +
-  labs(title="Proximity to Vacancy, Philly") +
+  labs(title = "Density of Vacant Lot Locations") +
   mapTheme()
 
-
 ```
+
 This appears to correlate spatially with the more expensive homes in the northeast and northwest of the city, but given the high levels of vacant lots in center city, which coincide with high housing prices, this may not be the best predictor
 
+# Methods
 
-```{r regression}
+
+# Results
+
+## Table of Results (Training Data)
+```{r regression partition and summary results}
 
 Philly_Data <- model_data %>%
   filter(toPredict == "MODELLING",
          age < 500) %>%
   dplyr::select(-toPredict,)
 
-regression <- lm(sale_price ~ ., data = as.data.frame(st_drop_geometry(Philly_Data)))
-
-summary(regression)
-
-```
-
-# Table of Results (Training Set)
-### remove challenge data, split into training and test sets
-
-```{r regression training set, warning=FALSE}
+# partition
 inTrain <- createDataPartition(
               y = paste(Philly_Data$neighborhood),
               p = .70, list = FALSE)
-Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,])
-Philly_Data.test <- Philly_Data[-inTrain,]  
+Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,]) %>%
+  dplyr::select(-musaID)
+Philly_Data.test <- Philly_Data[-inTrain,] %>%
+  dplyr::select(-musaID) 
  
 reg.training <- 
-  lm(sale_price ~ ., data = as.data.frame(Philly_Data.training))
+  lm(sale_price ~ ., data = as.data.frame(Philly_Data.training)) 
 
+reg.training %>%
+  tbl_regression(intercept = TRUE) %>%
+  modify_column_hide(column = ci) %>%
+  modify_column_unhide(column = std.error) %>%
+  bold_p(t = 0.05)
 ```
 
-# Table of Goodness of Fit (Test Set)
-
-```{r goodness of fit}
+## Table of Goodness of Fit (Test Data)
+```{r goodness of fit, results = "hide"}
 
 Philly_Data.test <-
   Philly_Data.test %>%
@@ -402,10 +385,9 @@ Philly_Data.test <-
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
          sale_price.APE = abs((sale_price.Predict - sale_price) / sale_price.Predict))
  
-st_drop_geometry(Philly_Data.test) %>%
-  select(sale_price.Predict, sale_price.Error, sale_price.AbsError, sale_price.APE) %>%
-  kbl()
-
+# st_drop_geometry(Philly_Data.test) %>%
+#   select(sale_price.Predict, sale_price.Error, sale_price.AbsError, sale_price.APE) %>%
+#   kbl()
 
 st_drop_geometry(Philly_Data.test) %>%
   gather(Variable, Value, -neighborhood) %>%
@@ -417,9 +399,9 @@ st_drop_geometry(Philly_Data.test) %>%
 ```
 
 
-# CV Results
+## Cross Validation Results
 
-```{r cross validation, warning-FALSE}
+```{r cross validation}
 
 fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
@@ -437,9 +419,9 @@ ggplot()+
 
 ```
 
-# Pred vs Obs Scatterplot
+## Predicted vs Observed Scatterplot
 
-```{r pred and obs}
+```{r pred and obs plot}
 
 Philly_Data.test %>%
   dplyr::select(sale_price.Predict, sale_price) %>%
@@ -455,12 +437,10 @@ Philly_Data.test %>%
 
 ```
 
+## Residuals and Moran's I Test
 
-
-# Residuals Map w/ Moran's I
-DAVE
-
-```{r residuals plot, fig.width=10}
+### Residuals Map
+```{r residuals plot, fig.width=15}
 
 ggplot() +
   geom_sf(data = neighborhoods, fill = "white") +
@@ -474,7 +454,7 @@ ggplot() +
 
 ```
   
-
+### Spatial Lag in Erros
 ```{r spatial lag in errors map}
 
 coords.test <-  st_coordinates(Philly_Data.test)
@@ -489,7 +469,7 @@ Philly_Data.test %>%
   geom_point(aes(x =lagPriceError, y =sale_price.Error))
 ```
 
-
+### Moran's I Plot
 ```{r moran}
 
 moranTest <- moran.mc(Philly_Data.test$sale_price.Error,
@@ -507,9 +487,10 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
   plotTheme()
 
 ```
-# Predicted Map (Test Set)
 
-```{r pred map, fig.width=10}
+## Predicted Sales Prices Map
+
+```{r pred map, fig.width=15}
 
 # Ensure that 'Philly_Data.challenge' only contains the observations you want to predict
 Philly_Data.challenge <- model_data
@@ -522,19 +503,19 @@ Philly_Data.challenge <- Philly_Data.challenge %>%
 global_min <- min(min(model_data$sale_price), min(Philly_Data.challenge$sale_price_prediction))
 global_max <- max(max(model_data$sale_price), max(Philly_Data.challenge$sale_price_prediction))
 
-# Your ggplot code for salepricemap
-salepricemap <- ggplot() +
-  geom_sf(data = neighborhoods, fill = "white") +
-  geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
-          aes(colour = sale_price), 
-          show.legend = "point", size = .001) +
-  scale_colour_gradientn(colors = palette_sequential,
-                         name="Sale Price",
-                         labels = scales::label_number(scale = 1),
-                         guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
-                         limits = c(global_min, global_max)) +  # Set limits
-  labs(title="Sale Price, Philly") +
-  mapTheme()
+# # Your ggplot code for salepricemap
+# salepricemap <- ggplot() +
+#   geom_sf(data = neighborhoods, fill = "white") +
+#   geom_sf(data = model_data %>% filter(sale_price < quantile(sale_price, 0.99)), 
+#           aes(colour = sale_price), 
+#           show.legend = "point", size = .001) +
+#   scale_colour_gradientn(colors = palette_sequential,
+#                          name="Sale Price",
+#                          labels = scales::label_number(scale = 1),
+#                          guide = guide_colourbar(title.position = "top", title.hjust = 0.5),
+#                          limits = c(global_min, global_max)) +  # Set limits
+#   labs(title="Sale Price, Philly") +
+#   mapTheme()
 
 # Your ggplot code for predictedsalepricemap
 predictedsalepricemap <- ggplot() +
@@ -550,11 +531,11 @@ predictedsalepricemap <- ggplot() +
   mapTheme()
 
 # Arrange the plots side by side
-grid.arrange(salepricemap, predictedsalepricemap, ncol=2)
+# grid.arrange(salepricemap, predictedsalepricemap, ncol=2)
 
-```
+predictedsalepricemap
 
-```{r export csv}
+# export sales price predictions for challenge data to csv
 Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
   filter(toPredict == "CHALLENGE") %>%
   dplyr::select(musaID, sale_price_prediction) %>%
@@ -564,12 +545,9 @@ write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
 
 ```
 
+## Mean Absolute Percent Error by Neighborhood Map
 
-# MAPE map by neighborhood
-
-Example from book
-
-```{r mape map}
+```{r mape map, fig.width=15}
 # Spatial join
 Philly_Data.test <- st_join(Philly_Data.test, neighborhoods, join = st_within)
 
@@ -598,8 +576,8 @@ MAPE.Map
 This shows that the model is good at predicting across much of the city, with errors clustered in one neighborhood. Why is the absolute percent error so high in that neighborhood?
 
 
-# Scatterplot - MAPE by neighborhood as a function of mean price by neighborhood
-```{r}
+## Mean Absolute Percent Error by Neighborhood Mean Price Scatterplot
+```{r mape scatterplot, fig.width = 10}
 # Calculate mean price by neighborhood
 mean_price_by_neighborhood <- st_drop_geometry(Philly_Data.test) %>%
   group_by(neighborhood) %>%
@@ -628,11 +606,9 @@ print(scatterplot)
 ```
 
 
-# Split by Census Groups
+## Model Generalizability by Demographics and Income
 
-Example from book
-
-```{r tracts}
+```{r tracts, fig.width=10, results = "hide", fig.show='hide'}
 tracts20 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E","B06011_001"), 
           year = 2020, state="PA", county="Philadelphia", geometry=T, output = "wide") %>%
