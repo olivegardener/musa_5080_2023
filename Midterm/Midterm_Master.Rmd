@@ -146,7 +146,7 @@ rail_stops <- st_join(light_rail, regional_rail)
 
 model_data <- student_data %>% 
   dplyr::select(musaID, toPredict, sale_price, exterior_condition, fireplaces, interior_condition, number_of_bathrooms, number_of_bedrooms,
-                  total_area, total_livable_area, year_built, geometry, ) %>% 
+                  total_area, total_livable_area, year_built, geometry) %>% 
   mutate(age = 2023-year_built) %>% 
   dplyr::select(-year_built)
 
@@ -360,7 +360,7 @@ Philly_Data <- model_data %>%
 # partition
 inTrain <- createDataPartition(
               y = paste(Philly_Data$neighborhood),
-              p = .70, list = FALSE)
+              p = .60, list = FALSE)
 Philly_Data.training <- st_drop_geometry(Philly_Data[inTrain,]) %>%
   dplyr::select(-musaID)
 Philly_Data.test <- Philly_Data[-inTrain,] %>%
