@@ -296,10 +296,10 @@ ggcorrplot(
   type="lower",
   insig = "blank",
   lab = TRUE,  # Ensure labels are shown
-  lab_size = 2.5  # Adjust the size of the labels
+  lab_size = 1.5  # Adjust the size of the labels
   ) +  
     labs(title = "Correlation Across Numeric Variables") +
-  theme(axis.text = element_text(size = 6)) 
+  theme(axis.text = element_text(size = 4)) 
 
 ```
 
@@ -326,7 +326,7 @@ These scatter plots show the relationship between four of our external variables
 
 ```{r sale price map}
 salepricemap <- ggplot() +
-  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = neighborhoods, fill = "white", color = "grey70") +
   geom_sf(data = model_data, 
           aes(colour = sale_price), 
           show.legend = "point", size = .001) +
@@ -341,14 +341,14 @@ salepricemap
 
 ```
 
-This map shows single family home sale prices from the provided assessment data.
+This map shows single family home sale prices from the provided assessment data. More expensive homes appear to cluster around Center City, just west of Center City, and in the northwestern part of the city.
 
 ## Maps of Independent Variables
 
 ### Tree Density
 ```{r map1}
 
-ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
+ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey70") +
   stat_density2d(data = data.frame(st_coordinates(trees)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
@@ -360,11 +360,11 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
 
 ```
 
-This map shows the density of individual trees - the most densely wooded areas are generally closer to Center City. One limitation with this data set is that certain large parks in the city do not have their trees counted by Philadelphia Parks and Recreation, who provides the information for this data set.
+This map shows the density of individual trees - the most densely wooded areas are generally closer to Center City, near the clusters of high-priced homes shown in the previous figure. One limitation with this data set is that certain large parks in the city do not have their trees counted by Philadelphia Parks and Recreation, who provides the information for this data set.
 
 ### High Quality Produce Access
 ```{r map2}
-ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS)), color = "grey80") +
+ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS)), color = "grey70") +
   scale_fill_gradient(low = "lavender", high = "purple", name = "Store Count")+
   labs(title = "High Quality Produce Access by Store Count",
        subtitle = "Data provided per block group") +
@@ -380,7 +380,7 @@ High quality produce access shows which areas of the city have more stores that 
 centroids <- st_centroid(vacant_lots)
 centroids_df <- data.frame(st_coordinates(centroids))
 
-ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
+ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey70") +
   stat_density2d(data = centroids_df, 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
@@ -391,7 +391,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   mapTheme()
 ```
 
-This heat map shows areas with high numbers of vacant lots - there are high concentrations of vacant lots in the northern and western parts of the city.   
+This heat map shows areas with high numbers of vacant lots - vacant lots appear concentrated in the northern and western parts of the city, just outside of the areas that showed clusters of high sale prices.
 
 # Methods
 
@@ -418,6 +418,7 @@ Philly_Data <- model_data %>%
   dplyr::select(-toPredict,)
 
 # partition
+set.seed(123)
 inTrain <- createDataPartition(
               y = paste(Philly_Data$neighborhood),
               p = .60, list = FALSE)
@@ -428,37 +429,13 @@ Philly_Data.test <- Philly_Data[-inTrain,] %>%
  
 reg.training <- 
   lm(sale_price ~ ., data = as.data.frame(Philly_Data.training)) 
+
 ```
-
-<!-- ### R Squared -->
-
-```{r square results}
-
-# smaller table for rsquared only in case where condensed results table below is used
-
-# rsquare <- summary(reg.training)$r.squared
-# rsquareadj <- summary(reg.training)$adj.r.squared
-# 
-# corrval <- cbind(rsquare, rsquareadj)
-# 
-# kbl(corrval, col.names = c('R^2', 'R^2 Adjusted'), digits = 3) %>% kable_styling(full_width = FALSE)
-```
-
-<!-- ### Regression Results -->
 
 ```{r regression results}
+
 summ(reg.training)
 
-# Condensing with kable table means the footnote with rsquared disappears at end
-
-# reg.training %>%
-#   tbl_regression(intercept = TRUE) %>%
-#   add_glance_source_note(include = c(r.squared, adj.r.squared)) %>%
-#   modify_column_hide(column = ci) %>%
-#   modify_column_unhide(column = std.error) %>%
-#   kbl() %>% kable_styling() %>%
-#   scroll_box(width = "100%", height = "300px",
-#              fixed_thead = TRUE)
 ```
 
 This table shows our regression model results, including how well our model fits the data and the significance and impact of each individual variable on sales price when all other predictors are held equal: 
@@ -469,6 +446,7 @@ This table shows our regression model results, including how well our model fits
 
 ## Table of Goodness of Fit (Test Data)
 ```{r goodness of fit}
+
 
 Philly_Data.test <-
   Philly_Data.test %>%
@@ -490,7 +468,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 ```
 
-The sale price mean absolute error (MAE) and sale price mean absolute percent error (MAPE) show us how much the average amount that our predictions differ from the actual sale prices for houses in the testing set. On average, our predictions are nearly \$60,000 higher or lower than the actual sale price for a home, representing around a 37% difference.  
+The sale price mean absolute error (MAE) and sale price mean absolute percent error (MAPE) show us how much the average amount that our predictions differ from the actual sale prices for houses in the testing set. On average, our predictions are nearly \$60,000 higher or lower than the actual sale price for a home, representing around a 36% difference.  
 
 ## Cross Validation Results
 
@@ -513,7 +491,7 @@ kbl(CVresults, col.names = c('CV Test MAE', 'CV Test MAE Standard Deviation'), d
 
 The process of cross-validating the results of our test set is conducted by generating the mean absolute errors of 100 groups of training data, which allows us to confirm if the MAE and MAPE from our test data is expected from our model or outside of the norm as a result of taking a random sample of the data for training. 
 
- * The table above shows that our test data MAE of about \$60,000 is nearly equal to the average MAE generated by our cross validation test, which has a standard deviation of about \$4,500.
+ * The table above shows that our test data MAE of about \$60,000 is nearly equal to the average MAE generated by our cross validation test, which has a standard deviation of about \$5,000.
 
 
 
@@ -545,7 +523,7 @@ Philly_Data.test %>%
 
 ```
 
-Plotting the predicted sale price as a function of actual sale price and adding lines that best fit the data show us that our predictions should be very close to accurate. However, the previous figures for MAPE told us that our predictions differed from the actual sale price by about 36% on average. As highlighted in later figures, we likely predict many neighborhoods relatively well and some neighborhoods very poorly.
+Plotting the predicted sale price as a function of actual sale price and adding lines that best fit the data show us that our predictions track relatively close to what sale price should be. The green line, which represents our predictions, appears to be just below the minimum and just above the maximum of the perfect prediction line in orange - these differences indicate that our model overvalues lower-priced homes and undervalues more expensive homes. However, the previous figures for MAPE told us that our predictions differed from the actual sale price by about 36% on average. As highlighted in later figures, we likely predict many neighborhoods relatively well and some neighborhoods very poorly.
 
 ## Residuals and Moran's I Test
 
@@ -553,9 +531,9 @@ Plotting the predicted sale price as a function of actual sale price and adding 
 ```{r residuals plot}
 
 ggplot() +
-  geom_sf(data = neighborhoods, fill = "white") +
+  geom_sf(data = neighborhoods, fill = "white", color = "grey70" ) +
   geom_sf(data = Philly_Data.test, aes(colour = q5(sale_price.Error)), 
-          show.legend = "point", size = .1, alpha = .5) +
+          show.legend = "point", size = .6, alpha = .5) +
   scale_colour_manual(values = palette_diverging,
                    labels=qBr(Philly_Data.test,"sale_price.Error"),
                    name="Quintile\nBreaks") +
@@ -654,12 +632,12 @@ predictedsalepricemap <- ggplot() +
 salepricemap + predictedsalepricemap
 
 #export sales price predictions for challenge data to csv
-# Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
-#   filter(toPredict == "CHALLENGE") %>%
-#   dplyr::select(musaID, sale_price_prediction) %>%
-#   mutate(teamName = "House It Going")
-# 
-# write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
+Philly_Data.challenge.csv <- st_drop_geometry(Philly_Data.challenge) %>%
+  filter(toPredict == "CHALLENGE") %>%
+  dplyr::select(musaID, sale_price_prediction) %>%
+  mutate(teamName = "House It Going")
+
+write.csv(Philly_Data.challenge.csv, "HouseItGoing.csv", row.names = FALSE)
 
 ```
 
@@ -715,6 +693,8 @@ HouseCount.Map
 ```
 
 By mapping the number observations per neighborhood in our training data, we can confirm if one of the neighborhoods we are predicting poorly for has a low number of observations. However, there are others neighborhoods with closer to the average number of houses that still predict poorly -  other factors are likely causing our poor prediction in specific neighborhoods.
+
+* Note: the color order was reversed from the previous figure to make matching high MAPE, but low number of observation neighborhoods easier to interpret. 
 
 ## Mean Absolute Percent Error by Neighborhood Mean Price Scatterplot
 ```{r mape scatterplot, fig.width = 10}
@@ -805,7 +785,7 @@ Adding our test data to the Philly Census tracts allows us to compare the predic
 
 # Discussion
 
-Ultimately, this model is not effective at predicting home prices. Our predicted sales prices on average were off by about $60,000 compared to the actual sale prices according to our mean absolute error - a mean absolute percent error of around 37%. For most Philadelphia neighborhoods, our errors in the predicted price were relatively low. However, our model show significant inaccuracy in one or a small handful of neighborhoods, which were often lower income, non-white majority neighborhoods. 
+Ultimately, this model is not effective at predicting home prices. Our predicted sales prices on average were off by about $60,000 compared to the actual sale prices according to our mean absolute error - a mean absolute percent error of around 36%. For most Philadelphia neighborhoods, our errors in the predicted price were relatively low. However, our model show significant inaccuracy in one or a small handful of neighborhoods, which were often lower income, non-white majority neighborhoods. 
 
 Most of the variables used in the model were statistically significant, but certain variables had interesting effects on the home price predictions. HOLC grades, which reflect the racist history of redlining in Philadelphia, show the persistent effects of these problematic lending policies - sale price was predicted to drop by \$6,000 per grade when moving from "Best" (a grade of 1 in this model) to "Hazardous" (a grade of 4). Quality produce and low produce access also show interesting trends that validated our expectations on how they would influence the model - an additional high quality produce store in the area of a home predicted a sale price increase of over \$2,200 and an additional low quality food store nearby is predicted to decrease the price by \$820 . Finally, it was surprising to see the predicted impact of one additional tree within a 500 foot radius - a nearly \$330 increase per tree.
 
