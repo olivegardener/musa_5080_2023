@@ -1,5 +1,5 @@
 ---
-title: "PPA_Midterm"
+title: "Predicting Single Family Home Prices in Philadelphia, PA"
 author: "Oliver Atwood + Dave Drennan"
 date: "2023-10-11"
 output: 
@@ -63,53 +63,57 @@ Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "1000000")  # Set to a large value
 
 palette_sequential <- c("#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026")
 palette_diverging <- c("#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99")
-palette_three <- c("#f1a340", "#f7f7f7", "#998ec3")
+palette_three <- c("#e66101", "#f7f7f7", "#5e3c99")
 
 ```
 # Introduction
 
-To support Zillow’s goal of more accurate housing market predictions, our goal with this analysis is to predict single family housing prices in Philadelphia, PA through the use of local data sources. This task is challenging due to the multifaceted nature of the housing market. House prices are influenced by both internal and external characteristics and are subject to the unruly forces of market dynamics, which add a layer of turbulence to the data. Not everyone is a rational actor...
+To support Zillow’s goal of more accurate housing market predictions, the focus of our analysis is to predict single family housing prices in Philadelphia, PA through the use of local data sources. This task is challenging due to the multifaceted nature of the housing market. House prices are influenced by both internal and external characteristics and are subject to the unruly forces of market dynamics, which add a layer of turbulence to the data. Not everyone is a rational actor...
 
-However, accurately estimating home values is hugely important because the cost of housing plays a critical role in the lives of residents. The value of a home is important to its owner because if overestimated, it may place undue burden on the homeowner through higher property taxes. On the other hand, underestimation of housing values leads to the devaluation of one of the largest investments in most people’s lives. As a result, it is critical to estimate the fair market value of houses by leveraging a wide variety of variables that influence home value.
+However, accurately estimating home values is hugely important because the cost of housing plays a critical role in the lives of residents. The value of a home is important to its owner because if overestimated, it may place undue burden on the homeowner through higher property taxes. On the other hand, underestimation of housing values leads to the devaluation of one of the largest investments in most people’s lives. Additionally, it's important that our customers are confident in the information we provide them given our status as a leader in the real estate business. As a result, it is critical to estimate the fair market value of houses by leveraging a wide variety of variables that influence home value.
 
-So why is this a difficult exercise? It is impossible to account for every factor in a model of housing price. Additionally, there is the risk of involving too many factors in the model, which results in estimates that are exceptionally accurate for the available data, but bad for data outside of the model. This is known as “overfitting” a model, which results in poor generalizability.
+So why is this a difficult exercise? It is impossible to account for every factor in a model of housing price. Additionally, there is the risk of involving too many factors in the model, which results in estimates that are exceptionally accurate for the available data we already have, but bad for data outside of the model. This is known as “overfitting” a model, which results in poor generalizability.
 
-The overall modeling strategy employed in this analysis involves the collection of a range of internal and external characteristics of individual houses and then using statistical methods to estimate the value of individual Philadelphia homes in the dataset. 
+The overall modeling strategy employed in this analysis involves the collection of a range of internal and external characteristics of individual houses, which are then used in statistical analyses to estimate the value of individual Philadelphia homes in the data set. 
 
-The starting point for this model was assessment data from the City of Philadelphia, which included sale prices and a variety of other internal characteristics for every house in Philadelphia. We also included a range of external data with characteristics of the broader urban landscape. Using a number of statistical methods, we summarized these characteristics in relation to each individual house in the assessment data. Once these internal and external characteristics were compiled into a single dataset, we explored relationships between the various factors and sale price, narrowing them down the ones which were the most impactful for home values.
+The starting point for this model was assessment data from the City of Philadelphia, which included sale prices and a variety of other internal characteristics for every house in Philadelphia. We also included a range of external data with characteristics of the broader urban landscape. Using a number of statistical methods, we summarized these characteristics in relation to each individual house in the assessment data. Once these internal and external characteristics were compiled into a single data set, we explored relationships between the various factors and sale price, narrowing them down the ones with the most impact for predicting home values.
 
-We then split the data into two groups, a “training set” and a “test set.” The training set was used to develop a model for predicting sale price for homes in Philadelphia based on the range of factors we felt most influenced home price. The resulting model was then used to predict sale prices of houses in the test set, and the actual and predicted sale prices were compared.
+We then split the data into two groups, a “training set” and a “test set.” The training set was used to develop a model for predicting sale prices for homes in Philadelphia using on our chosen factors. The resulting model was then used to predict sale prices of houses in the test set, and the actual and predicted sale prices were compared.
 
-When we used our model to predict sale prices across Philadelphia, it performed relatively well for areas with predominantly higher income, white populations. However, it struggled in areas with majority non-white and/or lower income populations.
+When we used our model to predict sale prices across Philadelphia, it performed relatively well for areas with predominantly higher income, white populations. However, it struggled more in areas with majority non-white and/or lower income populations.
 
 # Data
 
-Data used in this model were gathered from a variety of sources and joined into a single dataset for use in building a linear regression model for predicting home sale price. To supplement the original dataset provided for this project - housing assessment data for Philadelphia - we used a mix of API calls and direct downloads to gather the data.
+Data used in this model were gathered from a variety of sources and joined into a single data set. We used this data to build a linear regression model for predicting home sale price. To supplement the original data set provided for this project - housing assessment data for Philadelphia - we used a mix of API calls and direct downloads to gather the data.
 
 API calls were used to download most data gathered for this analysis, including: 
- - Demographic data from the American Community Survey (ACS), 
- - Data on the location of highways from OpenStreetMap (OSM),
- - Data on the trees, bike network, land use, parks, universities, neighborhoods, subway stops, community landcare lots, landcare maintenance lots, redlining, and food access in Philadelphia from the city’s ArcGIS REST data server.
 
-The remainder of the data was downloaded from Open Data Philly previously for use in a separate project and therefore was imported as a geodatabase. These datasets included information for vacant lots, recycling diversion rates, hospitals, regional rail stations, trail networks, trolley stops, and traffic collisions. Data was then merged as needed, such as combining trolley stops, subway stops and regional rail stations together to form a “rail station” dataset.
+* Demographic data from the American Community Survey (ACS), 
+* Data on the location of highways from OpenStreetMap (OSM),
+* Data on the trees, bike network, land use, parks, universities, neighborhoods, subway stops, community landcare lots, landcare maintenance lots, redlining, and food access in Philadelphia from the city’s ArcGIS REST data server.
 
-A cleaned version of the housing assessment data for Philadelphia was created, containing only the variables we felt would be most influential on single family home prices:
- - musaID and toPredict,
- - Sale price, 
- - Interior condition and exterior condition,
- - Fireplaces, 
- - Number of bathrooms and number of bedrooms, 
- - Total area and total livable area,
- - Year built, to calculate the age of the home,
- - Geometry, for mapping purposes
+The remainder of the data was previously downloaded from Open Data Philly for use in a separate project and was imported as a geodatabase. These data sets included information for vacant lots, recycling diversion rates, hospitals, regional rail stations, trail networks, trolley stops, and traffic collisions. Data was then merged as needed, such as combining trolley stops, subway stops and regional rail stations together to form a “rail station” data set.
+
+A cleaned version of the housing assessment data for Philadelphia was created, containing only the variables we felt were most influential on single family home prices:
+ 
+ * musaID and toPredict,
+ * Sale price, 
+ * Interior condition and exterior condition,
+ * Fireplaces, 
+ * Number of bathrooms and number of bedrooms, 
+ * Total area and total livable area,
+ * Year built, to calculate the age of the home,
+ * Geometry, for mapping purposes
 
 The external data were then integrated into the cleaned version of the housing assessment data for Philadelphia using a variety of methods: 
-Information from a given area, such as data from Census tracts, was added to individual points to contextualize the areas around a given home,
-The distance was calculated from each house to its nearest park,
-Tree totals were incorporated by counting all trees within 500 feet of each house,
-Rail stops and vacant lots were incorporated through a ‘K nearest neighbors’ function, which averaged the distance to the nearest 1 and 3 points, respectively. 
+ 
+ * Information from a given area, such as data from Census tracts, was added to individual points to contextualize the areas around a  home,
+ * The distance from each house to its nearest park was calculated ,
+ * Tree totals were incorporated by counting all trees within 500 feet of each house,
+ * Rail stops and vacant lots were incorporated through a ‘K nearest neighbors’ function, which averaged the distance to the nearest 1 and 3 stops and lots, respectively, 
+ * We filtered out data with the top 1% of sale prices to limit extreme outliers influencing our model.
 
-All incomplete variable fields were then filled as the median value from the full dataset for each variable. The joined data was then narrowed down by eliminating variables that were deemed too similar to each other through statistical methods, as well as variables that had a weak relationship with the sale price of homes.
+All incomplete variable fields were then calculated as the median value from the full data set for each variable. The joined data was  narrowed down by eliminating variables that were deemed too similar to each other through statistical methods, as well as variables that had a weak relationship with the sale price of homes.
 
 
 ## Loading Data
@@ -279,7 +283,7 @@ sumtable(model_data_table, out = "kable") %>%
 ```
 
 ## Correlation matrix
-```{r correlation matrix, fig.width=10}
+```{r correlation matrix}
 # Select variables of interest and convert them to numeric
 vars_of_interest <- select_if(st_drop_geometry(model_data), is.numeric) %>% 
   select(-musaID) %>% 
@@ -294,12 +298,12 @@ ggcorrplot(
   lab = TRUE,  # Ensure labels are shown
   lab_size = 2.5  # Adjust the size of the labels
   ) +  
-    labs(title = "Correlation across numeric variables") +
+    labs(title = "Correlation Across Numeric Variables") +
   theme(axis.text = element_text(size = 6)) 
 
 ```
 
-This correlation plot shows the relationship between variables in the model - values closer 1 or -1 mean that those two variables are similar in their predictive power on sale price - we used correlation plots to trim variables that had collinearity of .8 or more.
+This correlation matrix shows the relationship between variables in the model - values closer 1 or -1 mean that those two variables are similar in their predictive power on sale price - we used correlation plots to trim variables that had this collinearity of .8 or higher.
 
 ## Home Price Correlation Scatterplots
 
@@ -316,7 +320,7 @@ st_drop_geometry(model_data) %>%
 
 ```
 
-These scatter plots show the relationship between four of our external variables and sale price. There is a slight negative correlation between distance to park and sale price, meaning that generally speaking, the closer a house is to a park, the higher its sale price. For tree.count.buffer, vacant_lots_nn3, and quality_produce_access, these scatter plots show a positive correlation with sale_price, meaning that in general the more trees near a given house, the farther it is from the nearest three vacant lots, and the more options for quality produce available nearby, the higher its expected sale price.
+These scatter plots show the relationship between four of our external variables and sale price. There is a slight negative correlation between distance to park and sale price, meaning that generally speaking, the closer a house is to a park, the higher its sale price. For tree.count.buffer, vacant_lots_nn3, and quality_produce_access, these scatter plots show a positive correlation with sale_price, meaning that in general the more trees near a given house, the farther it is from the nearest three vacant lots, and the more options for quality produce available nearby, the higher a house's expected sale price.
 
 ## Map of Home Prices
 
@@ -337,7 +341,7 @@ salepricemap
 
 ```
 
-Map of single family home sale prices as reflected by the provided assessment data.
+This map shows single family home sale prices from the provided assessment data.
 
 ## Maps of Independent Variables
 
@@ -356,7 +360,7 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
 
 ```
 
-Density map of the locations of trees - the most densely wooded areas are generally closer to Center City. One limitation with this data set is that certain large parks in the city do not have their trees counted by Philadelphia Parks and Recreation, who provides the data for this data set.
+This map shows the density of individual trees - the most densely wooded areas are generally closer to Center City. One limitation with this data set is that certain large parks in the city do not have their trees counted by Philadelphia Parks and Recreation, who provides the information for this data set.
 
 ### High Quality Produce Access
 ```{r map2}
@@ -368,7 +372,7 @@ ggplot() + geom_sf(data = food_access, aes(fill = as.numeric(TOTAL_HPSS)), color
 
 ```
 
-High quality produce access shows which areas of the city have more stores that are considered to have a high supply of high quality and fresh produce, which is used to determine healthy food access. These stores also appear to cluster around Center City.
+High quality produce access shows which areas of the city have more stores that are considered to have a high supply of fresh produce, which is used as a qualifier for healthy food access. Block groups with these stores also appear to cluster around Center City.
 
 ### Vacant Lot Density
 ```{r map3}
@@ -387,21 +391,21 @@ ggplot() + geom_sf(data = neighborhoods, fill = "white", color = "grey80") +
   mapTheme()
 ```
 
-This heat map shows areas with high numbers of vacant lots based on their locations - there are high concentrations of vacant lots in northern and western parts of the city.   
+This heat map shows areas with high numbers of vacant lots - there are high concentrations of vacant lots in the northern and western parts of the city.   
 
 # Methods
 
-After compiling our data and developing features that we believed were predictors for sale price, we conducted a series of statistical analyses to test the accuracy of our prediction. The type of model used was a linear regression, which allows us to examine the individual impact of each predictor on the sale price of a home in the Philly data set when holding all other predictors equal. 
+After compiling our data and developing features that we believed were predictors for sale price, we conducted a series of statistical analyses to test the accuracy of our prediction. This model uses linear regression, which allowed us to examine the individual impact of each predictor on the sale price of a home in the Philly data set when holding all other predictors equal. 
 
-We split our data into two random groups for a training set and a test set - doing so allowed us to create a sale price prediction model using the training data to predict on the test data. This split let us use our model on data with known house sale prices, but with combinations of predictor variables that the model has not necessarily encountered. We then compared the sale price predictions in the test data to the actual sale prices and analyzed the difference between our predictions and reality.
+We split our data into two random groups for a training set and a test set - doing so allowed us to create a sale price prediction model using the training data to predict on the test data. This split let us use our model on houses with known sale prices, but with combinations of predictor variables that the model had not necessarily encountered before. We then compared the sale price predictions in the test data to the actual sale prices and analyzed the difference between our predictions and reality.
 
-Additional statistical methods were then used to compare our results and check if our testing data is representative of the city as a whole:
-- We calculated the absolute error and the absolute percent error (APE), which are key figures that show us how much our predictions differ from actual sales prices - the means of each figure were also calculated to show us how well our model performed across different areas of the city. 
- - We checked if the random group assigned to the test data would give us similar results to other randomly assigned test sets through cross validation - this let us confirm that our test data didn’t wildly differ from the rest of the city.
- - We compared how much the price errors for an individual house different to neighboring houses’ sale price errors and examined if our sale price errors show clustering, which would highlight the need for spatial solutions to accurately map home prices in the city.
+Additional statistical methods were then used to compare our results and check if our testing data was representative of the city as a whole:
+ 
+ * We calculated the absolute error and the absolute percent error (APE), which are key figures that show us how much our predictions differ from actual sales prices - the means of each figure were also calculated to show us how well our model performed across different areas of the city and Philadelphia as a whole.
+ * We checked if the random group assigned to the test data gave us similar results to other randomly assigned test sets through cross validation - this process let us confirm that our test data didn’t wildly differ from what would be expected in the rest of the city.
+ * We compared how much the prediction errors for an individual house differed with neighboring houses’ prediction errors and examined if these sale price errors showed clustering, which would highlight the need for better spatial solutions to accurately predict home prices.
 
-Through the mean absolute percent error (MAPE), we saw which neighborhoods our model predicted accurately, with a lower score meaning that the model is more accurate. We also used MAPE to examine the generalizability of our model on different demographics to see how our model performed in different contexts - in this case low income versus high income neighborhoods and majority white versus majority non-white neighborhoods.
-
+Through the mean absolute percent error (MAPE), we saw which neighborhoods our model predicted accurately, with a lower score meaning that the model was more accurate. We also used MAPE to examine the generalizability of our model with different demographics to see how our model performed in different contexts - in this case, low income versus high income neighborhoods and majority white versus majority non-white neighborhoods.
 
 # Results
 
@@ -457,11 +461,11 @@ summ(reg.training)
 #              fixed_thead = TRUE)
 ```
 
-This table shows our regression model results, including how well our model fits the data and the significance and impact of each individual variable on sales price when all other predictors are unchanged: 
+This table shows our regression model results, including how well our model fits the data and the significance and impact of each individual variable on sales price when all other predictors are held equal: 
 
-- The adjusted R² value is used due to the high number of variables caused by all neighborhoods being included in the regression model. This value tells us that 76% of the variability in sales price is explained by our model. On face value, this relatively high percentage means our model fits the data well, but adjusted R² alone doesn't tell us if this model is accurate - as shown later our chosen variables may be biased towards certain demographic and income contexts.
+ * The adjusted R-squared tells us that 76% of the variability in sales price is explained by our model. On face value, this relatively high percentage means our model fits the data well, but adjusted R-squared alone doesn't tell us if this model is accurate - as shown later in this report, our chosen variables may be biased towards certain demographic and income contexts. We used adjusted R-squared instead of the non-adjusted R-squared value because it's a better representation of model fit when there is a high number of variables in the model. 
 
-- The "Est." column shows us how much each variable impacts sales price when all other variables are held equal, with the "p" column indicating to us whether that variable is considered statistically significant within the context of the model most of our chosen variables and many of the individual neighborhoods are significant in their impacts on ale price, with p values of less than 0.05. Variables are measured in different ways - factors like the condition are representative of codes, where a 1 represents the best condition and each additional number means the house is in worse condition. Other variables like total livable area show the impact of on on additional square foot on the sale price - the estimate indicated that price increases by \$132 for every added square foot.
+ * The "Est." column shows us how much each variable impacts sales price when all other variables are held equal, with the "p" column indicating to us whether that variable is considered statistically significant within the context of the model. Most of our chosen variables and many of the individual neighborhoods are significant in their impacts on sale price with p values of less than 0.05. Variables are measured in different ways - factors like the condition represent codes assigned by the City, where a 1 represents the best condition and each additional value means the house is in worse condition. Other variables like total livable area show the impact of one additional square foot on the sale price - the estimate indicates that price predictions increase by \$132 for every added square foot.
 
 ## Table of Goodness of Fit (Test Data)
 ```{r goodness of fit}
@@ -471,7 +475,7 @@ Philly_Data.test <-
   mutate(sale_price.Predict = predict(reg.training, Philly_Data.test),
          sale_price.Error = sale_price.Predict - sale_price,
          sale_price.AbsError = abs(sale_price.Predict - sale_price),
-         sale_price.APE = (abs(sale_price.Predict - sale_price) / sale_price.Predict))
+         sale_price.APE = (abs(sale_price.Predict - sale_price) / sale_price))
  
 # st_drop_geometry(Philly_Data.test) %>%
 #   select(sale_price.Predict, sale_price.Error, sale_price.AbsError, sale_price.APE) %>%
@@ -486,7 +490,7 @@ st_drop_geometry(Philly_Data.test) %>%
 
 ```
 
-The sale price mean absolute error (MAE) and sale price mean absolute percent error (MAPE) show us how much the average amount that our predictions differ from the actual sale prices for houses in the testing set. On average, our predictions are nearly \$60,000 higher or lower than the actual sale price for a home, representing about a 27% difference.  
+The sale price mean absolute error (MAE) and sale price mean absolute percent error (MAPE) show us how much the average amount that our predictions differ from the actual sale prices for houses in the testing set. On average, our predictions are nearly \$60,000 higher or lower than the actual sale price for a home, representing around a 37% difference.  
 
 ## Cross Validation Results
 
@@ -507,9 +511,9 @@ CVresults <- cbind(CVMAE, SDMAE)
 kbl(CVresults, col.names = c('CV Test MAE', 'CV Test MAE Standard Deviation'), digits = 2) %>% kable_styling(full_width = FALSE)
 ```
 
-The process of cross-validating the results of our test set by generating the mean average errors of 100 groups of training data allows us to confirm if the MAE and MAPE from our test data is expected from our model or outside of the norm as a result of taking a random sample of the data for training. 
+The process of cross-validating the results of our test set is conducted by generating the mean absolute errors of 100 groups of training data, which allows us to confirm if the MAE and MAPE from our test data is expected from our model or outside of the norm as a result of taking a random sample of the data for training. 
 
-- The table above shows that our test data MAE of nearly \$60,000 is nearly equal to the average generated by our cross validation test, which has a standard deviation of about \$4,500.
+ * The table above shows that our test data MAE of about \$60,000 is nearly equal to the average MAE generated by our cross validation test, which has a standard deviation of about \$4,500.
 
 
 
@@ -521,7 +525,7 @@ ggplot()+
 
 ```
 
-Plotting the 100 cross validation mean averages errors shows the data centered around the overall mean of about \$60,000 and highlights how test data MAEs are likely to range between about \$50,000 and \$70,000 - about two standard deviations in either direction from the mean.  
+Plotting the 100 cross validation mean absolute errors shows the data centered around the overall mean of about \$60,000 and highlights how test data MAEs are likely to range between about \$50,000 and \$70,000 - about two standard deviations in either direction from the mean.  
 
 ## Predicted vs Observed Scatterplot
 
@@ -541,7 +545,7 @@ Philly_Data.test %>%
 
 ```
 
-Plotting the predicted sale price as a function of actual sale prices and adding lines that best fit the data show us that our predictions should be very close to accurate. However, the previous figures for MAPE told us that our predictions differed from the actual sale price by about 27% on average. As highlighted in later figures, we likely predict many neighborhoods relatively well and some neighborhoods very poorly.
+Plotting the predicted sale price as a function of actual sale price and adding lines that best fit the data show us that our predictions should be very close to accurate. However, the previous figures for MAPE told us that our predictions differed from the actual sale price by about 36% on average. As highlighted in later figures, we likely predict many neighborhoods relatively well and some neighborhoods very poorly.
 
 ## Residuals and Moran's I Test
 
@@ -560,7 +564,7 @@ ggplot() +
 
 ```
 
-By plotting the difference of the actual and predicted sale price of a particular home, known as the residual, we can see that our model both over- and underestimates sale prices in nearly every neighborhood, sometimes by wide margins. Price differences are plotted by quintile, which reveals that are model severely overestimates the sale price for certain houses by as much as over \$260,000 more than they actually sold for.
+By plotting the difference of the actual and predicted sale price of a particular home, known as the residual, we can see that our model both over- and underestimates sale prices in nearly every neighborhood, sometimes by wide margins. Price differences are plotted by quintile, which reveals that are model severely overestimates the sale price for certain houses by as much as over \$250,000 more than they actually sold for.
 
 ### Moran's I Plot
 ```{r moran}
@@ -587,7 +591,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 ```
 
-Conducting the Moran's I test lets us see how much the data in our test set is clustered - in other words, is the difference between the actual and predicted sale price of a particular home similar to other homes neighboring it? This test creates simulations of the test data by shuffling the results of differences to be randomly distributed across the city, plotting the results of the test as a histogram and the comparing it the actual observation of Moran's I in out test data. Our test result of Moran's I tells us that differences do cluster based on geography.
+Conducting the Moran's I test lets us see how clustered our data is - in other words, is the difference between the actual and predicted sale price of a particular home similar to other homes neighboring it? This test creates simulations of the test data by shuffling the results of differences to be randomly distributed across the city, plotting the results of the test as a histogram and then comparing it the actual observation of Moran's I in out test data. Our test result of Moran's I tells us that differences do cluster based on geography.
 
 ### Spatial Lag in Errors
 ```{r spatial lag in errors map}
@@ -602,7 +606,7 @@ Philly_Data.test %>%
        subtitle = "Orange line represents relationship between variables")
 ```
 
-The spatial lag in errors plot compares a house's sale price error to its neighbors - the line shows that the relationship is positive, further reinforcing that there is clustering of errors in our test data.
+The spatial lag in errors plot compares a house's sale price error to its neighbors - the line shows that the relationship is positive, further reinforcing that there is clustering of sale price prediction errors in our test data.
 
 ## Predicted Sales Prices Map
 
@@ -659,7 +663,7 @@ salepricemap + predictedsalepricemap
 
 ```
 
-Mapping the predicted sale prices side by side with the actual sale prices can let us compare what our model predicts home prices to be versus reality. The maps appear to be subtly different, with a few more areas that look like darker or lighter on the prediction map - this reinforces how our model lightly over-predicts sale price in certain areas and severely under-predicts in others. Given the sheer volume of observations in our data set, it is difficult to highlight specific points to compare in a city-wide map.  
+Mapping the predicted sale prices side by side with the actual sale prices can let us compare what our model predicts home prices to be versus reality. The maps appear to be subtly different, with a few more areas that look darker or lighter on the prediction map compared to the actual sale price map - this reinforces how our model slightly over-predicts sale price in certain areas and severely under-predicts in others. Given the sheer volume of observations in our data set, it is difficult to highlight specific points to compare in a city-wide map.  
 
 ## Mean Absolute Percent Error by Neighborhood Map
 
@@ -679,7 +683,7 @@ neighborhoods <- neighborhoods %>%
 
 MAPE.Map <- ggplot() + 
   geom_sf(data = neighborhoods, aes(fill = mean.MAPE)) +
-  scale_fill_gradient(low = "yellow", high = "red",
+  scale_fill_gradient(low = "lavender", high = "#5e3c99",
                         name = "MAPE") +
   labs(title = "Mean test set MAPE by neighborhood") +
   mapTheme()
@@ -688,7 +692,7 @@ MAPE.Map
 
 ```
 
-Mapping our MAPE by neighborhood shows that the model is okay at predicting across much of the city - however, errors cluster much higher in one neighborhood in particular without a clear reason for why. One possibility is a lack of observations in our training data for that neighborhood relative to others, which would lead our model to struggle with predictions in that neighborhood and skew our results. 
+Mapping our MAPE by neighborhood shows that the model is okay at predicting across much of the city - however, errors cluster much higher in one neighborhood in particular without a clear reason for why. One possibility is a lack of observations in our training data for that neighborhood relative to others, which would lead our model to struggle with predictions in that neighborhood and skew our results. The variable we chose may also not predict well in the context of that neighborhood.
 
 ```{r house count}
 HouseCount_by_neighborhood <- st_drop_geometry(Philly_Data.training) %>%
@@ -702,7 +706,7 @@ neighborhoods <- neighborhoods %>%
 
 HouseCount.Map <- ggplot() + 
   geom_sf(data = neighborhoods, aes(fill = HouseCount)) +
-  scale_fill_gradient(low = "yellow", high = "red",
+  scale_fill_gradient(low = "#5e3c99", high = "lavender",
                         name = "House Count") +
   labs(title = "Number of Houses Per Neighborhood") +
   mapTheme()
@@ -726,7 +730,7 @@ neighborhood_summary <- left_join(mean_price_by_neighborhood, mean_MAPE_by_neigh
 # Create a scatterplot of MAPE by neighborhood as a function of mean price by neighborhood
 scatterplot <- ggplot(neighborhood_summary, aes(x = mean_price, y = mean.MAPE)) +
   geom_point(aes(color = mean.MAPE), size = 1) +
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_gradient(low = "lavender", high = "#5e3c99") +
   labs(
     title = "Scatterplot of MAPE by Neighborhood as a Function of Mean Price",
     x = "Mean Price by Neighborhood",
@@ -741,7 +745,7 @@ print(scatterplot)
 
 ```
 
-This plot reinforces our observations from the MAPE map. For most neighborhoods, the average difference between predicted and observed sale price is relatively low, but one neighborhood in particular is a large outlier and about 4-5 times higher than the next highest mean MAPE for a neighborhood. 
+This plot reinforces our observations from the MAPE map. For most neighborhoods, the average difference between predicted and observed sale price is relatively low, but one neighborhood in particular is a more significant outlier. 
 
 ## Model Generalizability by Demographics and Income
 
@@ -771,7 +775,7 @@ grid.arrange(ncol = 2,
     mapTheme() + theme(legend.position="bottom"))
 ```
 
-To analyze the generalizability of our model, we need to see how it predicts across different contexts. The above maps show American Community Survey data from 2020 for Philadelphia, comparing majority non-white with majority white Census tracts on the left and high income with low income census tracts on the right. Here, low income is defined as the 2020 30% Area Median Income for a household of two in Philadelphia, as per the Department of Human Services in Pennsylvania.
+To analyze the generalizability of our model, we need to see how it predicts across different contexts. The above maps show American Community Survey data from 2020 for Philadelphia, comparing majority non-white with majority white Census tracts on the left and high income with low income Census tracts on the right. Here, low income is defined as the 2020 30% Area Median Income for a household of two in Philadelphia, as per the Department of Human Services in Pennsylvania.
 
 ```{r comptable for demo}
 #MAPE for both regressions by race
@@ -801,17 +805,17 @@ Adding our test data to the Philly Census tracts allows us to compare the predic
 
 # Discussion
 
-Ultimately, this model is not effective at predicting home prices. Our predicted sales prices on average were off by about $60,000 compared to the actual sale prices according to our mean average error - a mean average percent error of nearly of 27%. For most Philadelphia neighborhoods, our errors in the predicted price were relatively low. However, our model show significant inaccuracy in one or a small handful of neighborhoods, which were often lower income, non-white majority neighborhoods. 
+Ultimately, this model is not effective at predicting home prices. Our predicted sales prices on average were off by about $60,000 compared to the actual sale prices according to our mean absolute error - a mean absolute percent error of around 37%. For most Philadelphia neighborhoods, our errors in the predicted price were relatively low. However, our model show significant inaccuracy in one or a small handful of neighborhoods, which were often lower income, non-white majority neighborhoods. 
 
-Most of the variables used in the model were statistically significant, but certain variables had interesting effects on the home price predictions. HOLC grades, which reflect the racist history of redlining in Philadelphia, show the persistent effects of these lending policies - sale price was predicted to drop by \$6,000 per grade when moving from "Best" (a grade of 1 in this model) to "Hazardous" (a grade of 4). Quality produce and low produce access also show interesting trends that validated our expectations on how they would influence the model - an additional high quality produce store could predicted a home value increase of over \$2,200 and an additional low quality food store would decrease the price by \$820 . Finally, it was surprising to see the predicted impact of one additional tree within a 500 foot radius - a nearly \$330 increase per tree.
+Most of the variables used in the model were statistically significant, but certain variables had interesting effects on the home price predictions. HOLC grades, which reflect the racist history of redlining in Philadelphia, show the persistent effects of these problematic lending policies - sale price was predicted to drop by \$6,000 per grade when moving from "Best" (a grade of 1 in this model) to "Hazardous" (a grade of 4). Quality produce and low produce access also show interesting trends that validated our expectations on how they would influence the model - an additional high quality produce store in the area of a home predicted a sale price increase of over \$2,200 and an additional low quality food store nearby is predicted to decrease the price by \$820 . Finally, it was surprising to see the predicted impact of one additional tree within a 500 foot radius - a nearly \$330 increase per tree.
 
-Based on the R-squared value of this model, the model was able to predict about 76% of the variation in home prices. This relatively high R-squared led us to initially believe that our model fit the data well, but we ultimately struggled to account for prices in certain neighborhood contexts, especially low income and majority non-white. The high R-squared value but poor generalizability highlights the pitfalls in chasing after a high percentage, because in the end, it doesn’t necessarily reflect the predictive quality of the model.
+Based on the R-squared value of this model, the model was able to predict about 76% of the variation in home prices. This relatively high R-squared led us to initially believe that our model fit the data well, but we ultimately struggled to account for prices in certain neighborhood contexts, especially in some specific low income and majority non-white. The high R-squared value but poor generalizability highlights the pitfalls in chasing after a high percentage, because in the end, it doesn’t necessarily reflect the predictive quality of the model.
 
-The variables with the largest impact on predicted price were internal characteristics, especially the interior condition of a home, which could drop the price by nearly \$29,000 per condition value - as mentioned previously, a worse assessed condition has a higher value based on the city's methodology. Fireplaces were surprisingly impactful, with the presence of one fireplace influencing the predicting price of a home with an increase of over \$23,000. Bathrooms also had a meaningful impact on our predictions, with each additional bathroom worth as much as over \$17,000 in our predictions. The percentage of bachelor's degrees around a home was also influential, with each additional percentage of the population with a bachelor's degree increasing the price prediction by \$830.
+The variables with the largest impact on predicted price were internal characteristics, especially the interior condition of a home, which could drop the predicted price by nearly \$29,000 per condition value - as mentioned previously, a worse assessed condition has a higher value based on the city's methodology. Fireplaces were surprisingly impactful, with the presence of one additional fireplace influencing the predicted price of a home by an increase of over \$23,000. Bathrooms also had a meaningful impact on our predictions, with each additional bathroom worth as much as over \$17,000 in our predictions. The percentage of bachelor's degrees around a home was also influential, with each additional percentage of the population with a bachelor's degree increasing the price prediction by \$830.
 
-While our comparison scatterplot of actual versus predicted sale price appears to show a strong fit, the MAPE map shows how we could often not account for the spatial variation in particular neighborhoods. This could be due to certain neighborhoods having lower numbers of observations to train on. It could also be due to variation in price in these neighborhoods not relating to the variables of our model in the same way that occurs in other neighborhoods. Each time we ran the model, one neighborhood in either North Philly or West Philly would be significantly off, and the neighborhoods that the model would fail to predict well for are mostly non-white majority and lower income.
+While our comparison scatter plot of actual versus predicted sale price appears to show a strong fit, the MAPE map shows how we could often not account for the spatial variation in particular neighborhoods. This could be due to certain neighborhoods having lower numbers of observations to train on. It could also be due to variation in price in these neighborhoods not relating to the variables of our model in the same way as other neighborhoods. Each time we ran the model, one neighborhood in either North Philly or West Philly would be significantly off, and the neighborhoods that the model would fail to predict well for are mostly non-white majority and lower income.
 
-It's possible that in splitting the data between testing and training data sets, some neighborhoods (particularly ones with a lower number of homes) might end up being under-represented in the training data. We also chose to impute values for missing data as the median value for each variable across the whole data set. By doing so, we may be assuming uncommon characteristics for neighborhoods that have more houses with missing data and overestimating the values of homes in that area as a result. Assessment data might be spatially incomplete, with better data available in wealthier, whiter neighborhoods, which given our methods for imputing missing data would result in skewed imputed values.
+It's possible that in splitting the data between testing and training data sets, some neighborhoods (particularly ones with a lower number of homes) might end up being under-represented in the training data. We also chose to impute values for missing data as the median value for each variable across the whole data set. By doing so, we may be assuming uncommon characteristics for neighborhoods that have more houses with missing data and overestimating the values of homes in that area as a result. Assessment data might also be spatially incomplete, with better data available in wealthier, whiter neighborhoods, which given our methods for imputing missing data would result in skewed imputed values for that neighborhood.
 
 # Conclusion and Recommendation
 
