@@ -1,0 +1,128 @@
+---
+title: "Predictive Tree Work"
+author: "Oliver Atwood"
+date: "2023-10-17"
+output: html_document
+---
+Your job is to build a version of the spatial risk model seen in the book (and in the Week 6 "Predictive Policing" lab) for a different outcome that likely suffers from more selection bias than burglary. You can build this model in Chicago or any other city with sufficient open data resources.
+
+Please also add at least two new independent features not used in Chapter 5, and iteratively build models until you have landed on one that optimizes for accuracy and generalizability.
+
+Your final deliverable should be in R markdown form with code (please hide the code blocks). Please provide the following materials with brief annotations (please don’t forget this):
+
+A map of your outcome of interest in point form, with some description of what, when, and why you think selection bias may be an issue.
+A map of your outcome joined to the fishnet.
+A small multiple map of your risk factors in the fishnet (counts, distance and/or other feature engineering approaches).
+Local Moran’s I-related small multiple map of your outcome (see 5.4.1)
+A small multiple scatterplot with correlations.
+A histogram of your dependent variable.
+A small multiple map of model errors by random k-fold and spatial cross validation.
+A table of MAE and standard deviation MAE by regression.
+A table of raw errors by race context for a random k-fold vs. spatial cross validation regression.
+The map comparing kernel density to risk predictions for the next year’s crime.
+The bar plot making this comparison.
+Two paragraphs on why or why not you would recommend your algorithm be put into production.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+# root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(classInt)   # for KDE and ML risk class intervals
+library(tigris)
+library(arcpullr)
+
+
+```
+
+## R Markdown
+
+```{r cars}
+# Coordinate System
+coordinate_system <- 2272
+
+trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
+  st_transform(crs = coordinate_system)
+
+#Load Boundary File
+philly_boundary <- counties(state = 42) %>% 
+  filter(NAME == "Philadelphia") %>% 
+  st_transform(crs = coordinate_system)
+
+StreetTreeRequests <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/ArcGIS/rest/services/philly311__public_cases/FeatureServer/0/") %>% 
+  filter(service_name == 'Street Trees') %>%
+  filter(lat != "") %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(crs = coordinate_system)
+  
+# StreetTreeRequests <- st_read("/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/public_cases_fc.csv") %>% 
+#   filter(service_name == 'Street Trees') %>% 
+#   filter(lat != "") %>% 
+#   st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
+#   st_transform(crs = coordinate_system)
+
+# Plot the two datasets together
+ggplot() +
+  geom_sf(data = philly_boundary, fill = "lightblue") +
+  geom_sf(data = StreetTreeRequests, size = 0.01) + 
+  theme_minimal() +
+  labs(title = "Street Tree Requests in Philadelphia")
+
+
+```
+```{r}
+## using {sf} to create the grid
+## Note the `.[chicagoBoundary] %>% ` line. This is needed to clip the grid to our data
+fishnet <- 
+  st_make_grid(philly_boundary,
+               cellsize = 500, 
+               square = TRUE) %>%
+  .[philly_boundary] %>%            # fast way to select intersecting polygons
+  st_sf() %>%
+  mutate(uniqueID = 1:n())
+
+```
+```{r}
+## add a value of 1 to each crime, sum them with aggregate
+tree_net <- 
+  dplyr::select(StreetTreeRequests) %>% 
+  mutate(countRequests = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countRequests = replace_na(countRequests, 0),
+         uniqueID = 1:n(),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+ggplot() +
+  geom_sf(data = tree_net, aes(fill = countRequests), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Burglaires for the fishnet") +
+  mapTheme()
+```
+
+
+## Including Plots
+
+
+```{r pressure, echo=FALSE}
+
+```
+
