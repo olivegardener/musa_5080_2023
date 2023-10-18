@@ -67,31 +67,76 @@ philly_boundary <- counties(state = 42) %>%
 ```
 # 311 Requests Data Wrangling
 ```{r}
-# 311 Requests API (needs work)
-# StreetTreeRequests_ALL <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/ArcGIS/rest/services/philly311__public_cases/FeatureServer/0/") %>%
+# # 311 Requests API (needs work)
+# # StreetTreeRequests_ALL <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/ArcGIS/rest/services/philly311__public_cases/FeatureServer/0/") %>%
+# #   filter(service_name == 'Street Trees') %>%
+# #   filter(lat != "") %>%
+# #   st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+# #   st_transform(crs = coordinate_system)
+#   
+# # 311 Requests (by year)
+# # StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2022.csv") %>%
+# # StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2021.csv") %>%
+# StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2019.csv") %>%
+# # StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2018.csv") %>%
 #   filter(service_name == 'Street Trees') %>%
 #   filter(lat != "") %>%
 #   st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
 #   st_transform(crs = coordinate_system)
-  
-# 311 Requests (by year)
-# StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2022.csv") %>%
-# StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2021.csv") %>%
-StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2019.csv") %>%
-# StreetTreeRequests <- st_read("/Users/oliveratwood/Downloads/Philly 311/public_cases_fc2018.csv") %>%
-  filter(service_name == 'Street Trees') %>%
-  filter(lat != "") %>%
-  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
-  st_transform(crs = coordinate_system)
+# 
+# # Specify the file path where you want to save the GeoJSON file
+# # file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2022.geojson"
+# # file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2021.geojson"
+# file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2019.geojson"
+# # file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2018.geojson"
+# 
+# # Write the data frame as GeoJSON
+# st_write(StreetTreeRequests, file_path)
+```
 
-# Specify the file path where you want to save the GeoJSON file
-# file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2022.geojson"
-# file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2021.geojson"
-file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2019.geojson"
-# file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/StreetTreeRequests2018.geojson"
+# Load data for independent variables
+```{r}
+trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
+  filter(TREE_DBH > 0, TREE_DBH < 100) %>% 
+  st_transform(crs = coordinate_system) %>% 
+  st_join(philly_boundary) %>%
+  mutate(Legend = "PhillyTrees") %>%
+  mutate(Legend2 = "DBH")
 
-# Write the data frame as GeoJSON
-st_write(StreetTreeRequests, file_path)
+#2018 ACS data for Philly
+tracts2018 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B19013_001E",
+                        "DP04_0046PE"), 
+          year=2018, state=42, county="101", 
+          geometry=TRUE, output="wide") %>%
+  st_transform(coordinate_system) %>%
+  rename(TotalPop = B25026_001E, 
+         MedHHInc = B19013_001E, 
+         HomeOwnRate = DP04_0046PE) %>% 
+  mutate(area = st_area(geometry)) %>%
+  mutate(year = "2018", 
+         PopDensity = drop_units(TotalPop / (area / 2.788e+7))) %>% 
+  dplyr::select(-NAME, -TotalPop, -area, -starts_with("D"), -starts_with("B"))
+
+neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zfb/ArcGIS/rest/services/Philadelphia_Neighborhoods/FeatureServer/0")%>%
+  st_transform(crs = 2272)
+
+# community_landcare <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_CommunityLandcare/FeatureServer/0/") %>% 
+#   st_transform(crs = 2272)
+# landcare_maintenance <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_PhilaLandCare_Maintenance/FeatureServer/0/") %>%
+#   st_transform(crs = 2272)
+# 
+# community_landcare <- st_centroid(community_landcare)
+# community_landcare <- st_geometry(community_landcare)
+# community_landcare <- st_sf(geometry = community_landcare)
+# 
+# landcare_maintenance <- st_centroid(landcare_maintenance)
+# landcare_maintenance <- st_geometry(landcare_maintenance)
+# landcare_maintenance <- st_sf(geometry = landcare_maintenance)
+# 
+# landcare_lots <- rbind(community_landcare, landcare_maintenance)
 ```
 
 # Load in Selected 311 Data
@@ -100,8 +145,6 @@ st_write(StreetTreeRequests, file_path)
 # Load Street Tree 311 Requests (previously cleaned, see commented code above)
 StreetTreeRequests <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/StreetTreeRequests2018.geojson")
 
-
-Week_6/PredictiveTreeing/Data/StreetTreeRequests.geojson
 ```
 
 
@@ -110,7 +153,7 @@ Week_6/PredictiveTreeing/Data/StreetTreeRequests.geojson
 grid.arrange(ncol=2,
 ggplot() + 
   geom_sf(data = philly_boundary) +
-  geom_sf(data = StreetTreeRequests, colour="darkgreen", size=0.1, show.legend = "point") +
+  geom_sf(data = StreetTreeRequests, colour="orange", size=0.1, show.legend = "point") +
   labs(title= "Tree 311 Calls, Philadelphia - 2022") +
   mapTheme(title_size = 10),
 
@@ -158,51 +201,6 @@ ggplot() +
 ```
 
 ## Modeling Spatial Features
-```{r}
-trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
-  filter(TREE_DBH > 0, TREE_DBH < 100) %>% 
-  st_transform(crs = coordinate_system) %>% 
-  st_join(philly_boundary) %>%
-  mutate(Legend = "PhillyTrees") %>%
-  mutate(Legend2 = "DBH")
-
-
-#2020 ACS data for Philly
-tracts2020 <- 
-  get_acs(geography = "tract", 
-          variables = c("B25026_001E",
-                        "B19013_001E",
-                        "DP04_0046PE"), 
-          year=2020, state=42, county="101", 
-          geometry=TRUE, output="wide") %>%
-  st_transform(coordinate_system) %>%
-  rename(TotalPop = B25026_001E, 
-         MedHHInc = B19013_001E, 
-         HomeOwnRate = DP04_0046PE) %>% 
-  mutate(area = st_area(geometry)) %>%
-  mutate(year = "2020", 
-         PopDensity = drop_units(TotalPop / (area / 2.788e+7))) %>% 
-  dplyr::select(-NAME, -TotalPop, -area, -starts_with("D"), -starts_with("B"))
-
-neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zfb/ArcGIS/rest/services/Philadelphia_Neighborhoods/FeatureServer/0")%>%
-  st_transform(crs = 2272)
-community_landcare <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_CommunityLandcare/FeatureServer/0/") %>% 
-  st_transform(crs = 2272)
-landcare_maintenance <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PHS_PhilaLandCare_Maintenance/FeatureServer/0/") %>%
-  st_transform(crs = 2272)
-
-community_landcare <- st_centroid(community_landcare)
-community_landcare <- st_geometry(community_landcare)
-community_landcare <- st_sf(geometry = community_landcare)
-
-landcare_maintenance <- st_centroid(landcare_maintenance)
-landcare_maintenance <- st_geometry(landcare_maintenance)
-landcare_maintenance <- st_sf(geometry = landcare_maintenance)
-
-landcare_lots <- rbind(community_landcare, landcare_maintenance)
-
-
-```
 
 ```{r}
 vars_net <- trees %>%
@@ -255,9 +253,9 @@ Using spatial joins to join *centroids* of fishnets to polygon for neighborhoods
 
 final_net <-
   st_centroid(final_net) %>%
-    st_join(dplyr::select(tracts2020, MedHHInc), by = "uniqueID") %>%
-    st_join(dplyr::select(tracts2020, HomeOwnRate), by = "uniqueID") %>%
-    st_join(dplyr::select(tracts2020, PopDensity), by = "uniqueID") %>%
+    st_join(dplyr::select(tracts2018, MedHHInc), by = "uniqueID") %>%
+    st_join(dplyr::select(tracts2018, HomeOwnRate), by = "uniqueID") %>%
+    st_join(dplyr::select(tracts2018, PopDensity), by = "uniqueID") %>%
     st_join(dplyr::select(neighborhoods, NAME), by = "uniqueID") %>%
       st_drop_geometry() %>%
       left_join(dplyr::select(final_net, geometry, uniqueID)) %>%
@@ -473,7 +471,7 @@ burg_KDE_sf <- burg_KDE_sum %>%
            Risk_Category == 1 ~ "1st")) %>%
   cbind(
     aggregate(
-      dplyr::select(burglaries18) %>% mutate(burgCount = 1), ., sum) %>%
+      dplyr::select(StreetTreeRequests19) %>% mutate(burgCount = 1), ., sum) %>%
     mutate(burgCount = replace_na(burgCount, 0))) %>%
   dplyr::select(label, Risk_Category, burgCount)
 ```
