@@ -10,28 +10,27 @@ Please also add at least two new independent features not used in Chapter 5, and
 
 Your final deliverable should be in R markdown form with code (please hide the code blocks). Please provide the following materials with brief annotations (please don’t forget this):
 
-A map of your outcome of interest in point form, with some description of what, when, and why you think selection bias may be an issue.
-A map of your outcome joined to the fishnet.
-A small multiple map of your risk factors in the fishnet (counts, distance and/or other feature engineering approaches).
-Local Moran’s I-related small multiple map of your outcome (see 5.4.1)
-A small multiple scatterplot with correlations.
-A histogram of your dependent variable.
-A small multiple map of model errors by random k-fold and spatial cross validation.
-A table of MAE and standard deviation MAE by regression.
-A table of raw errors by race context for a random k-fold vs. spatial cross validation regression.
-The map comparing kernel density to risk predictions for the next year’s crime.
-The bar plot making this comparison.
-Two paragraphs on why or why not you would recommend your algorithm be put into production.
 
-```{r setup, include=FALSE}
+
+
+
+
+The purpose of adapting this predictive policing algorithm to predict Street Tree 311 calls is to facilitate preventative care and avoid property damage from fallen trees. It must be said that this theoretical care is highly aspirational, as there are currently thousands of tree work calls waiting to be resolved. However, if the city were able to clear the backlog of tree maintenance requests, this tool could theoretically be used to focus preventative tree care efforts in areas most likely to experience 311 calls about street trees.
+
+
+
+
+## Setup
+Clear Environment
+```{r, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 rm(list=ls())
 
-# root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 
 ```
 
+Load Libraries
 ```{r}
 library(tidyverse)
 library(sf)
@@ -50,14 +49,17 @@ library(classInt)   # for KDE and ML risk class intervals
 library(tigris)
 library(arcpullr)
 library(units)
+library(zip)
 
 ```
 
-## R Markdown
-
-```{r cars}
+Set Parameters
+```{r}
 # Coordinate System
 coordinate_system <- 2272
+
+# Resolution
+resolution <- 1000
 
 #Load Boundary File
 philly_boundary <- counties(state = 42) %>% 
@@ -65,7 +67,8 @@ philly_boundary <- counties(state = 42) %>%
   st_transform(crs = coordinate_system)
 
 ```
-# 311 Requests Data Wrangling
+## Data Wrangling
+Filter 311 requests data
 ```{r}
 # # 311 Requests API (needs work)
 # # StreetTreeRequests_ALL <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/ArcGIS/rest/services/philly311__public_cases/FeatureServer/0/") %>%
@@ -92,16 +95,43 @@ philly_boundary <- counties(state = 42) %>%
 # 
 # # Write the data frame as GeoJSON
 # st_write(StreetTreeRequests, file_path)
+# 
+# # LOAD +WRITE TREE INVENTORY
+# trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
+#   filter(TREE_DBH > 0, TREE_DBH < 100) %>% 
+#   st_transform(crs = coordinate_system) %>% 
+#   st_join(philly_boundary) %>%
+#   mutate(Legend = "PhillyTrees") %>%
+#   mutate(Legend2 = "DBH")
+# 
+# # Write the data frame as GeoJSON
+# file_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Week_6/PredictiveTreeing/Data/PPR_Tree_Inventory_OA.geojson"
+# st_write(trees, file_path)
+# 
+# # Compress the file using gzip
+# system(paste("gzip", file_path))
 ```
 
-# Load data for independent variables
+Load data for independent variables
 ```{r}
-trees <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/PPR_Tree_Inventory_2022/FeatureServer/0/") %>%
-  filter(TREE_DBH > 0, TREE_DBH < 100) %>% 
-  st_transform(crs = coordinate_system) %>% 
-  st_join(philly_boundary) %>%
-  mutate(Legend = "PhillyTrees") %>%
-  mutate(Legend2 = "DBH")
+# Load and Unzip tree inventory
+file_path_gz <- "https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/PPR_Tree_Inventory_OA.geojson.gz"
+
+# Unzipping and reading the content
+con <- gzcon(file(file_path_gz, "rb"))
+geojson_content <- readLines(con)
+close(con)
+
+# Write uncompressed content to a temporary file
+temp_file <- tempfile(fileext = ".geojson")
+writeLines(geojson_content, temp_file)
+
+# Read the GeoJSON from the temporary file
+trees <- st_read(temp_file, quiet = TRUE)
+
+# Delete the temporary file after reading it
+unlink(temp_file)
+
 
 #2018 ACS data for Philly
 tracts2018 <- 
@@ -118,6 +148,8 @@ tracts2018 <-
   mutate(area = st_area(geometry)) %>%
   mutate(year = "2018", 
          PopDensity = drop_units(TotalPop / (area / 2.788e+7))) %>% 
+  mutate(HomeOwnRate = ifelse(is.na(HomeOwnRate), 0, HomeOwnRate)) %>% 
+  mutate(MedHHInc = ifelse(is.na(MedHHInc), 0, MedHHInc)) %>% 
   dplyr::select(-NAME, -TotalPop, -area, -starts_with("D"), -starts_with("B"))
 
 neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zfb/ArcGIS/rest/services/Philadelphia_Neighborhoods/FeatureServer/0")%>%
@@ -137,16 +169,24 @@ neighborhoods <- get_spatial_layer("https://services1.arcgis.com/a6oRSxEw6eIY5Zf
 # landcare_maintenance <- st_sf(geometry = landcare_maintenance)
 # 
 # landcare_lots <- rbind(community_landcare, landcare_maintenance)
+
+
+gdb_path <- "/Users/oliveratwood/Documents/GitHub/musa_5080_2023/Midterm/data/Features4PPA.gdb"
+layers <- ogrListLayers(gdb_path)
+
+Vacant_Lots <- sf::st_read(gdb_path, layer = "VacantLots")
 ```
 
-# Load in Selected 311 Data
+Load in Selected 311 Data
 ```{r}
-# !!!!!!link to github raw!
 # Load Street Tree 311 Requests (previously cleaned, see commented code above)
 StreetTreeRequests <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/StreetTreeRequests2018.geojson")
 
 ```
 
+A map of your outcome of interest in point form, with some description of what, when, and why you think selection bias may be an issue.
+
+In this analysis, I have adapted a methodology originally used to predict the occurrence of crime to predict the likelihood of 311 calls for street trees. It is likely that selection bias plays a similar role in this dynamic as it does in predictive policing. 311 calls for street trees are likely to occur are, obviously, in areas with more trees. It is possible that certain individuals are more likely to place calls than others neighborhoods. It is also likely that areas with higher population density are more likely to have individuals making 311 calls about street trees.
 
 ```{r fig.width=6, fig.height=4}
 # uses grid.arrange to organize independent plots
@@ -173,16 +213,17 @@ ggplot() +
 ## Note the `.[philly_boundary] %>% ` line. This is needed to clip the grid to our data
 fishnet <- 
   st_make_grid(philly_boundary,
-               cellsize = 5000, 
+               cellsize = resolution, 
                square = TRUE) %>%
-               # hexagon = TRUE) %>%
+               # hexagon = TRUE) %>% #option for a hexagonal grid
   .[philly_boundary] %>%            # fast way to select intersecting polygons
   st_sf() %>%
   mutate(uniqueID = 1:n())
 
 ```
+A map of your outcome joined to the fishnet.
 
-```{r}
+```{r, fig.width=10}
 ## add a value of 1 to each tree request, sum them with aggregate
 tree_net <- 
   dplyr::select(StreetTreeRequests) %>% 
@@ -219,8 +260,6 @@ vars_net <- trees %>%
 
 ## Nearest Neighbor Feature
 
-> Review: what is NN and what does `k` represent in this function?
-
 ```{r}
 # convinience to reduce length of function names.
 st_c    <- st_coordinates
@@ -251,8 +290,7 @@ Using spatial joins to join *centroids* of fishnets to polygon for neighborhoods
 
 ```{r}
 
-final_net <-
-  st_centroid(final_net) %>%
+final_net <- st_centroid(final_net) %>%
     st_join(dplyr::select(tracts2018, MedHHInc), by = "uniqueID") %>%
     st_join(dplyr::select(tracts2018, HomeOwnRate), by = "uniqueID") %>%
     st_join(dplyr::select(tracts2018, PopDensity), by = "uniqueID") %>%
@@ -262,9 +300,38 @@ final_net <-
       st_sf() %>%
   na.omit()
 
+final_net <- final_net %>% 
+  rename(neighborhoods = NAME)
+
 # for live demo
 # mapview::mapview(final_net, zcol = "District")
 ```
+
+A small multiple map of your risk factors in the fishnet (counts, distance and/or other feature engineering approaches).
+
+```{r, fig.width=10}
+final_net.long <- final_net %>% 
+  dplyr::select(-neighborhoods, -cvID)
+
+final_net.long <- gather(final_net.long, Variable, value, -geometry, -uniqueID, -countRequests)
+vars <- unique(final_net.long$Variable)
+
+vars <- unique(final_net.long$Variable)
+mapList <- list()
+
+for(i in seq_along(vars)){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(final_net.long, Variable == vars[i]), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=vars[i]) +
+      mapTheme()
+}
+
+
+do.call(grid.arrange,c(mapList, ncol=3, top="Risk Factors by Fishnet"))
+```
+
 
 ## Local Moran's I for fishnet grid cells
 
@@ -308,9 +375,17 @@ final_net.localMorans <-
 
 This is a complex code chunk - it's a loop which builds ggplots of local Moran's for each of your `vars`
 
-> What does a significant hot spot tell us about the distribution of tree requests?
+Local Moran’s I-related small multiple map of your outcome (see 5.4.1)
+A small multiple scatterplot with correlations.
+A histogram of your dependent variable.
+A small multiple map of model errors by random k-fold and spatial cross validation.
+A table of MAE and standard deviation MAE by regression.
+A table of raw errors by race context for a random k-fold vs. spatial cross validation regression.
+The map comparing kernel density to risk predictions for the next year’s crime.
+The bar plot making this comparison.
+Two paragraphs on why or why not you would recommend your algorithm be put into production.
 
-```{r}
+```{r, fig.width=10}
 ## This is just for plotting
 vars <- unique(final_net.localMorans$Variable)
 varList <- list()
@@ -342,16 +417,15 @@ final_net <- final_net %>%
                                            Trees.isSig == 1))), 
                        k = 1))
 
-## What does k = 1 represent?
 ```
 
-> What does `k = 1` above mean in terms of measuring nearest neighbors?
+
 
 ### Plot NN distance to hot spot
 
-```{r}
+```{r, fig.width=10}
 ggplot() +
-      geom_sf(data = final_net, aes(fill=Trees.isSig.dist), colour=NA) +
+      geom_sf(data = final_net, aes(fill=Trees.isSig.dist), color=NA) +
       scale_fill_viridis(name="NN Distance") +
       labs(title="Street Tree 311 Requests NN Distance") +
       mapTheme()
@@ -361,7 +435,7 @@ ggplot() +
 
 Leave One Group Out CV on spatial features
 
-```{r sults='hide'}
+```{r results='hide'}
 
 ## define the variables we want
 reg.ss.vars <- c("trees.nn", "Trees.isSig.dist")
@@ -377,6 +451,7 @@ reg.ss.spatialCV <- crossValidate(
   indVariables = reg.ss.vars) %>%
     dplyr::select(cvID = uniqueID, countRequests, Prediction, geometry)
 ```
+
 
 ```{r}
 # calculate errors by NEIGHBORHOOD
@@ -408,20 +483,20 @@ The `spatstat` function gets us kernal density estimates with varying search rad
 
 Note that the code here is *different* than in the book - it has been updated to keep up with changes in packages.
 
-```{r}
+```{r, fig.width=10}
 # demo of kernel width
-burg_ppp <- as.ppp(st_coordinates(StreetTreeRequests), W = st_bbox(final_net))
-burg_KD.1000 <- density.ppp(burg_ppp, 1000)
-burg_KD.1500 <- density.ppp(burg_ppp, 1500)
-burg_KD.2000 <- density.ppp(burg_ppp, 2000)
-burg_KD.df <- rbind(
-  mutate(data.frame(rasterToPoints(mask(raster(burg_KD.1000), as(neighborhoods, 'Spatial')))), Legend = "1000 Ft."),
-  mutate(data.frame(rasterToPoints(mask(raster(burg_KD.1500), as(neighborhoods, 'Spatial')))), Legend = "1500 Ft."),
-  mutate(data.frame(rasterToPoints(mask(raster(burg_KD.2000), as(neighborhoods, 'Spatial')))), Legend = "2000 Ft.")) 
+TreeCall_ppp <- as.ppp(st_coordinates(StreetTreeRequests), W = st_bbox(final_net))
+TreeCall.1000 <- density.ppp(TreeCall_ppp, 1000)
+TreeCall.1500 <- density.ppp(TreeCall_ppp, 1500)
+TreeCall.2000 <- density.ppp(TreeCall_ppp, 2000)
+TreeCall_KD.df <- rbind(
+  mutate(data.frame(rasterToPoints(mask(raster(TreeCall.1000), as(neighborhoods, 'Spatial')))), Legend = "1000 Ft."),
+  mutate(data.frame(rasterToPoints(mask(raster(TreeCall.1500), as(neighborhoods, 'Spatial')))), Legend = "1500 Ft."),
+  mutate(data.frame(rasterToPoints(mask(raster(TreeCall.2000), as(neighborhoods, 'Spatial')))), Legend = "2000 Ft.")) 
 
-burg_KD.df$Legend <- factor(burg_KD.df$Legend, levels = c("1000 Ft.", "1500 Ft.", "2000 Ft."))
+TreeCall_KD.df$Legend <- factor(TreeCall_KD.df$Legend, levels = c("1000 Ft.", "1500 Ft.", "2000 Ft."))
 
-ggplot(data=burg_KD.df, aes(x=x, y=y)) +
+ggplot(data=TreeCall_KD.df, aes(x=x, y=y)) +
   geom_raster(aes(fill=layer)) + 
   facet_wrap(~Legend) +
   coord_sf(crs=st_crs(final_net)) + 
@@ -430,13 +505,13 @@ ggplot(data=burg_KD.df, aes(x=x, y=y)) +
   mapTheme(title_size = 14)
 ```
 
-```{r}
+```{r, fig.width=10}
 
-as.data.frame(burg_KD.1000) %>%
+as.data.frame(TreeCall.1000) %>%
   st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
   aggregate(., final_net, mean) %>%
    ggplot() +
-     geom_sf(aes(fill=value)) +
+     geom_sf(aes(fill=value), color=NA) +
      geom_sf(data = sample_n(StreetTreeRequests, 1500), color = 'orange',size = .01) +
      scale_fill_viridis(name = "Density") +
      labs(title = "Kernel density of 2022 Street Tree 311 Requests") +
@@ -455,12 +530,12 @@ StreetTreeRequests19 <- st_read("https://raw.githubusercontent.com/olivegardener
 
 ```{r}
 
-burg_KDE_sum <- as.data.frame(burg_KD.1000) %>%
+tree_KDE_sum <- as.data.frame(TreeCall.1000) %>%
   st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
   aggregate(., final_net, mean) 
-kde_breaks <- classIntervals(burg_KDE_sum$value, 
+kde_breaks <- classIntervals(tree_KDE_sum$value, 
                              n = 5, "fisher")
-burg_KDE_sf <- burg_KDE_sum %>%
+tree_KDE_sf <- tree_KDE_sum %>%
   mutate(label = "Kernel Density",
          Risk_Category = classInt::findCols(kde_breaks),
          Risk_Category = case_when(
@@ -471,9 +546,9 @@ burg_KDE_sf <- burg_KDE_sum %>%
            Risk_Category == 1 ~ "1st")) %>%
   cbind(
     aggregate(
-      dplyr::select(StreetTreeRequests19) %>% mutate(burgCount = 1), ., sum) %>%
-    mutate(burgCount = replace_na(burgCount, 0))) %>%
-  dplyr::select(label, Risk_Category, burgCount)
+      dplyr::select(StreetTreeRequests19) %>% mutate(TreeCallCount = 1), ., sum) %>%
+    mutate(TreeCallCount = replace_na(TreeCallCount, 0))) %>%
+  dplyr::select(label, Risk_Category, TreeCallCount)
 ```
 
 Note that this is different from the book, where we pull a model out of a list of models we've created. For your homework, you'll be creating multiple models.
@@ -481,7 +556,7 @@ Note that this is different from the book, where we pull a model out of a list o
 ```{r}
 ml_breaks <- classIntervals(reg.ss.spatialCV$Prediction, 
                              n = 5, "fisher")
-burg_risk_sf <-
+tree_risk_sf <-
   reg.ss.spatialCV %>%
   mutate(label = "Risk Predictions",
          Risk_Category =classInt::findCols(ml_breaks),
@@ -493,42 +568,42 @@ burg_risk_sf <-
            Risk_Category == 1 ~ "1st")) %>%
   cbind(
     aggregate(
-      dplyr::select(burglaries18) %>% mutate(burgCount = 1), ., sum) %>%
-      mutate(burgCount = replace_na(burgCount, 0))) %>%
-  dplyr::select(label,Risk_Category, burgCount)
+      dplyr::select(StreetTreeRequests19) %>% mutate(TreeCallCount = 1), ., sum) %>%
+      mutate(TreeCallCount = replace_na(TreeCallCount, 0))) %>%
+  dplyr::select(label,Risk_Category, TreeCallCount)
 ```
 
 We don't do quite as well because we don't have very many features, but still pretty good.
 
 ```{r}
-rbind(burg_KDE_sf, burg_risk_sf) %>%
+rbind(tree_KDE_sf, tree_risk_sf) %>%
   na.omit() %>%
   gather(Variable, Value, -label, -Risk_Category, -geometry) %>%
   ggplot() +
     geom_sf(aes(fill = Risk_Category), colour = NA) +
-    geom_sf(data = sample_n(burglaries18, 3000), size = .5, colour = "black") +
+    geom_sf(data = sample_n(StreetTreeRequests19, 3000), size = .1, colour = "black", alpha = .1) +
     facet_wrap(~label, ) +
     scale_fill_viridis(discrete = TRUE) +
     labs(title="Comparison of Kernel Density and Risk Predictions",
-         subtitle="2017 burglar risk predictions; 2018 burglaries") +
+         subtitle="2019 Street Tree 311 Call Predictions; 2018 Calls") +
     mapTheme(title_size = 14)
 ```
 
 ```{r}
-rbind(burg_KDE_sf, burg_risk_sf) %>%
+rbind(tree_KDE_sf, tree_risk_sf) %>%
   st_drop_geometry() %>%
   na.omit() %>%
   gather(Variable, Value, -label, -Risk_Category) %>%
   group_by(label, Risk_Category) %>%
-  summarize(countBurglaries = sum(Value)) %>%
+  summarize(countTreeCalls = sum(Value)) %>%
   ungroup() %>%
   group_by(label) %>%
-  mutate(Pcnt_of_test_set_crimes = countBurglaries / sum(countBurglaries)) %>%
-    ggplot(aes(Risk_Category,Pcnt_of_test_set_crimes)) +
+  mutate(Pcnt_of_test_set_calls = countTreeCalls / sum(countTreeCalls)) %>%
+    ggplot(aes(Risk_Category,Pcnt_of_test_set_calls)) +
       geom_bar(aes(fill=label), position="dodge", stat="identity") +
       scale_fill_viridis(discrete = TRUE, name = "Model") +
-      labs(title = "Risk prediction vs. Kernel density, 2018 burglaries",
-           y = "% of Test Set Burglaries (per model)",
+      labs(title = "Call prediction vs. Kernel density, 2019 Street Tree 311 Calls",
+           y = "% of Test Set Calls (per model)",
            x = "Risk Category") +
   theme_bw() +
       theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
