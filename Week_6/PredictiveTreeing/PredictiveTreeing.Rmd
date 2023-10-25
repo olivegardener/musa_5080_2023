@@ -5,14 +5,11 @@ date: "2023-10-23"
 output: html_document:
     code_folding: hide
 ---
-Build a version of the spatial risk model seen in the book (and in the Week 6 "Predictive Policing" lab) for a different outcome that likely suffers from more selection bias than burglary.
+## Introduction
+In this analysis, I have adapted a methodology originally used to predict the occurrence of crime to predict the likelihood of 311 calls for street trees. It is likely that selection bias plays a similar role in this dynamic as it does in predictive policing. Selection bias in this dataset is likely for a number of reasons, including the fact that some philly residents are unaware of or unable to access the 311 service due to technological or language barriers, whereas others might be 'power users' of the service who might over-use the service by submitting multiple requests for a single event. These factors and others can skew the data, leading areas of the city being under- or over-represented, independent of the actual distribution of street tree work need.
 
-Please also add at least two new independent features not used in Chapter 5, and iteratively build models until you have landed on one that optimizes for accuracy and generalizability.
+The purpose of adapting this predictive policing algorithm to predict Street Tree 311 calls is to facilitate preventative care and avoid property damage from fallen trees. It must be said that this theoretical care is highly aspirational, as there are currently thousands of tree work calls waiting to be resolved. However, if the city were able to clear the backlog of tree maintenance requests, this tool could theoretically be used to focus preventative tree care efforts in areas most likely to experience 311 calls about street trees. After all, as the famous Ben Franklin quote goes, 'an ounce of prevention is worth a pound of cure.'
 
-The purpose of adapting this predictive policing algorithm to predict Street Tree 311 calls is to facilitate preventative care and avoid property damage from fallen trees. It must be said that this theoretical care is highly aspirational, as there are currently thousands of tree work calls waiting to be resolved. However, if the city were able to clear the backlog of tree maintenance requests, this tool could theoretically be used to focus preventative tree care efforts in areas most likely to experience 311 calls about street trees.
-
-
-#eyesonthestreet
 
 ## Setup
 Clear Environment
@@ -47,31 +44,8 @@ library(zip)
 library(rgdal)
 library(osmdata)
 ```
-# Set Parameters
-```{r}
-# Coordinate System
-coordinate_system <- 2272
-# # Resolution
-resolution <- 1000
-# # #Load Boundary File
-# query <- opq("Philadelphia, PA, USA") %>%
-#    add_osm_feature("boundary", "administrative")
-# 
-# philly_boundary <- osmdata_sf(query)
-# philly_boundary <- philly_boundary$osm_polygons
-# philly_boundary <- philly_boundary %>% st_transform(crs = coordinate_system)
-# 
-# #Load Boundary File
-# philly_boundary <- counties(state = 42) %>%
-#   filter(NAME == "Philadelphia")
 
-#PHILLYBOUNDARY
-philly_boundary <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/City_Limits.geojson") %>%
-  st_transform(crs = 2272)
-
-```
-## Data Wrangling
-Filter 311 requests data
+Data Wrangling
 ```{r}
 # # 311 Requests API (needs work)
 # # StreetTreeRequests_ALL <- get_spatial_layer("https://services.arcgis.com/fLeGjb7u4uXqeF9q/ArcGIS/rest/services/philly311__public_cases/FeatureServer/0/") %>%
@@ -113,6 +87,30 @@ Filter 311 requests data
 #
 # # Compress the file using gzip
 # system(paste("gzip", file_path))
+```
+
+Set Parameters
+```{r}
+# Coordinate System
+coordinate_system <- 2272
+# # Resolution
+resolution <- 1000
+# # #Load Boundary File
+# query <- opq("Philadelphia, PA, USA") %>%
+#    add_osm_feature("boundary", "administrative")
+# 
+# philly_boundary <- osmdata_sf(query)
+# philly_boundary <- philly_boundary$osm_polygons
+# philly_boundary <- philly_boundary %>% st_transform(crs = coordinate_system)
+# 
+# #Load Boundary File
+# philly_boundary <- counties(state = 42) %>%
+#   filter(NAME == "Philadelphia")
+
+#PHILLYBOUNDARY
+philly_boundary <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/City_Limits.geojson") %>%
+  st_transform(crs = 2272)
+
 ```
 
 Load data for independent variables
@@ -195,12 +193,8 @@ StreetTreeRequests <- st_read("https://raw.githubusercontent.com/olivegardener/m
 
 ```
 
-A map of your outcome of interest in point form, with some description of what, when, and why you think selection bias may be an issue.
-
-In this analysis, I have adapted a methodology originally used to predict the occurrence of crime to predict the likelihood of 311 calls for street trees. It is likely that selection bias plays a similar role in this dynamic as it does in predictive policing. Selection bias in this dataset is likely for a number of reasons, including the fact that some philly residents are unaware of or unable to access the 311 service due to technological or language barriers, whereas others might be 'power users' of the service who might over-use the service by submitting multiple requests for a single event. These factors and others can skew the data, leading areas of the city being under- or over-represented, independent of the actual distribution of street tree work need.
-
-
-### A map of your outcome of interest
+## Preliminary Analysis
+A map of the outcome of interest
 ```{r fig.width=6, fig.height=4}
 # uses grid.arrange to organize independent plots
 grid.arrange(ncol=2,
@@ -220,7 +214,7 @@ ggplot() +
   labs(title = "Density of Tree 311 Calls") +
   mapTheme(title_size = 10) + theme(legend.position = "none"))
 ```
-
+These maps show how street tree 311 calls are distributed across the city. It would appear that there are some hotspots.
 ```{r}
 ## using {sf} to create the grid
 ## Note the `.[philly_boundary] %>% ` line. This is needed to clip the grid to our data
@@ -235,7 +229,7 @@ fishnet <-
 
 ```
 
-### A map of the outcome of interest joined to the fishnet.
+A map of the outcome of interest joined to the fishnet.
 ```{r, fig.width=10}
 ## add a value of 1 to each tree request, sum them with aggregate
 tree_net <- 
@@ -253,10 +247,10 @@ ggplot() +
   labs(title = "Count of Street Tree Service Requests for the Fishnet") +
   mapTheme()
 ```
-Joining the count of street tree 311 requests to the fishnet reveals some hotspots, where single cells are bright with as many as 20 requests! Could this be indicative of actual concentrations of tree work needing to be done, or perhaps just a small handful of persistent citizens?
+Joining the count of street tree 311 requests to the fishnet highlights these hotspots, where single cells are bright with a very high number of requests! Could this be indicative of actual concentrations of tree work needing to be done, or is it rather just a small handful of particularly persistent citizens?
 
 # Feature Engineering
-### Nearest Neighbor Feature
+Nearest Neighbor Feature
 ```{r}
 ## NN from trees
 vars_net <- fishnet %>%
@@ -276,7 +270,7 @@ vars_net <- left_join(tree_net, st_drop_geometry(vars_net), by="uniqueID")
 # vars_net <- left_join(tree_net, st_drop_geometry(vars_net), by="uniqueID")
 
 ```
-### Joining Spatial Features
+Joining Spatial Features
 ```{r}
 vars_net <- trees %>%
   st_join(vars_net, join=st_within) %>%
@@ -349,7 +343,7 @@ vars_net <- Vacant_Lots %>%
 
 ```
 
-### Joining areal data
+Joining areal data
 ```{r}
 
 final_net <- st_centroid(vars_net) %>%
@@ -368,7 +362,8 @@ final_net <- final_net %>%
 # for live demo
 # mapview::mapview(final_net, zcol = "District")
 ```
-### A small multiple map of risk factors in the fishnet.
+## Assessing Independent Variables
+A small multiple map of risk factors in the fishnet.
 ```{r, fig.width=10}
 final_net.long <- final_net %>% 
   dplyr::select(-neighborhoods, -cvID)
@@ -393,7 +388,7 @@ do.call(grid.arrange,c(mapList, ncol=3, top="Influencing Factors by Fishnet"))
 ```
 This map reveals some of these features have similar spatial distribution to street tree 311 calls.
 
-## Local Moran's I
+Local Moran's I
 ```{r}
 ## generates warnings from PROJ issues
 ## {spdep} to make polygon to neighborhoods... 
@@ -405,7 +400,6 @@ final_net.weights <- nb2listw(final_net.nb, style="W", zero.policy=TRUE)
 ```
 
 ```{r}
-## see ?localmoran
 local_morans <- localmoran(final_net$countRequests, final_net.weights, zero.policy=TRUE) %>% 
   as.data.frame()
 
@@ -421,7 +415,7 @@ final_net.localMorans <-
   
 ```
 
-### Local Moran’s I-related small multiple map of your outcome (see 5.4.1)
+Local Moran’s I-related small multiple map of your outcome
 ```{r, fig.width=10}
 final_net.localMorans <- 
   cbind(
@@ -449,11 +443,11 @@ for(i in vars){
 do.call(grid.arrange,c(varList, ncol = 4, top = "Local Morans I statistics, Street Tree 311 Requests"))
 
 ```
-This multiple map shows some distinct areas of spatial clustering for street tree 311 calls.
+This multiple map uses the moran's I statistic to highlight some distinct areas of spatial clustering for street tree 311 calls.
 
-In this series, the P-Value map shows us the likelihood that spatial clustering is due to chance. Small P_Values indicate significant spatial clustering for a given location, whereas large P_Values suggest that the observed spatial pattern is likely due to random chance. In this map, we see a lot of larger p-values just outside of the clusters.
+In this series, the P-Value map shows us the likelihood that spatial clustering is due to chance. Small P_Values indicate significant spatial clustering for a given location, whereas large P_Values suggest that the observed spatial pattern is likely due to random chance. In this map, we see a lot of larger p-values just outside of the clusters, which could indicate that while some areas (the clusters) might have strong underlying factors causing a significant pattern, the areas just outside might have different factors at play, leading to a more random distribution.
 
-NN distance to hot spots
+Nearest neighbor distance to hot spots
 ```{r}
 final_net <-
   final_net %>% 
@@ -474,8 +468,9 @@ ggplot() +
       mapTheme()
 
 ```
+This measure of distance to the nearest cluster allows us to smooth out the impact of the clusters across space, in addition to treating them as a binary.
 
-### A small multiple scatterplot with correlations.
+A small multiple scatterplot with correlations.
 ```{r, fig.width=10}
 correlation.long <-
   st_drop_geometry(final_net) %>%
@@ -497,9 +492,9 @@ ggplot(correlation.long, aes(Value, countRequests)) +
   plotTheme()
 
 ```
-These scatterplots suggest a number of things about the relationship between street tree 311 calls and our factors of interest. We see some strong positive correlations between popDensity, PhillyTrees, SewerInlets, and sum_TREE_DBH, suggesting that the more trees, people, stormwater infrastructure, and the bigger the trees of a given area, the more likely that area is to place street tree 311 calls. Since PhillTrees (tree count), sum_TREE_DBH, and mean_TREE_DBH are likely correlated, we should move forward with just one. Since ___ has the strongest correlation with 311 calls being placed, let's move forward with that one.
+These scatterplots suggest a number of things about the relationship between street tree 311 calls and our factors of interest. We see some strong positive correlations between popDensity, PhillyTrees, SewerInlets, and sum_TREE_DBH, suggesting that the more trees, people, stormwater infrastructure, and the bigger the trees of a given area, the more likely that area is to place street tree 311 calls. 
 
-### A histogram of the dependent variable.
+A histogram of the dependent variable.
 ```{r}
 ggplot(final_net, aes(x=countRequests)) +
   geom_histogram(binwidth=1, fill="blue", color="black", alpha=0.7) + # You can adjust binwidth as needed
@@ -509,11 +504,17 @@ ggplot(final_net, aes(x=countRequests)) +
   theme_minimal()
 
 ```
-This histogram shows that across the city, most fishnet cells do not have any calls, and there is a steady dropoff from cells with lower numbers of calls to those with higher numbers of calls. Notable here is that at the high end, there are increases in the frequency of calls, which suggests some areas have people who are 'frequent callers' or trees who are 'frequent fallers.'
+This histogram shows that across the city, most fishnet cells do not have any calls, and there is a steady dropoff from cells with lower numbers of calls to those with higher numbers of calls. Notable here is that at the high end, there are increases in the frequency of calls, which suggests some areas have people who are 'frequent callers' or trees who are 'frequent fallers.' Perhaps we should remove them?
+
+Removing the outliers to improve model performance (capping the number of calls at the 90th percentile)
+```{r}
+final_net <- final_net %>% 
+  mutate(countRequests = ifelse(countRequests > quantile(countRequests, 0.90), quantile(countRequests, 0.90), countRequests))
+```
 
 
-## Modeling and CV
-### Leave One Group Out CV on spatial features
+## Modeling and Cross-Validation
+Choose Variables
 ```{r}
 # Version 1
 # reg.vars <- c("trees.nn", "sum_TREE_DBH", "mean_TREE_DBH", "PhillyTrees",
@@ -554,6 +555,8 @@ reg.ss.vars <- c("PhillyTrees", "sum_TREE_DBH", "SewerInlets", "PopDensity", "Ho
 
 ```
 
+'Leave One Group Out' Cross-Validation on spatial features
+Cross-validation is a technique used to assess how well a model will generalize to an independent dataset. It involves partitioning the original dataset into a training set to train the model and a test set to evaluate it.
 ```{r}
 reg.cv <- crossValidate(
   dataset = final_net,
@@ -585,12 +588,7 @@ reg.ss.spatialCV <- crossValidate(
 
 ```
 
-Cross-validation is a technique used to assess how well a model will generalize to an independent dataset.
-
-It involves partitioning the original dataset into a training set to train the model and a test set to evaluate it.
-
-
-### A table of MAE and standard deviation MAE by regression.
+A table of Mean Absolute Error and standard deviation Mean Absolute Error for each model.
 ```{r}
 reg.summary <- 
   rbind(
@@ -634,6 +632,7 @@ st_drop_geometry(error_by_reg_and_fold) %>%
 These are some pretty low MAE values. How do they break down across differing demographics?
 
 Here is a table of raw errors by race context for a random k-fold vs. spatial cross validation regression.
+
 ```{r}
 tracts18 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E"), 
@@ -694,15 +693,18 @@ The highest numbers of over-predictions appear to occur downtown, whereas under-
 <br>
 Since there are lots of errors on either side of zero, our low mean error is probably not the best measure of model accuracy.
 
-
-## Get 2019 Street Tree 311 call data
+# Testing Predictions
+Get 2019 Street Tree 311 call data
 ```{r}
 StreetTreeRequests19 <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_6/PredictiveTreeing/Data/StreetTreeRequests2019.geojson") %>%
   .[fishnet,]
 
 ```
-## Density vs predictions
+Density vs predictions
 ```{r}
+TreeCall_ppp <- as.ppp(st_coordinates(StreetTreeRequests19), W = st_bbox(final_net))
+TreeCall.1000 <- density.ppp(TreeCall_ppp, resolution)
+
 tree_KDE_sum <- as.data.frame(TreeCall.1000) %>%
   st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
   aggregate(., final_net, mean) 
@@ -731,10 +733,10 @@ tree_KDE_sf <- tree_KDE_sum %>%
 # reg.spatialCV
 # reg.ss.spatialCV
 
-ml_breaks <- classIntervals(reg.spatialCV$Prediction, 
+ml_breaks <- classIntervals(reg.ss.spatialCV$Prediction, 
                              n = 5, "fisher")
-tree_risk_sf <-
-  reg.ss.spatialCV %>%
+
+tree_risk_sf <- reg.ss.spatialCV %>%
   mutate(label = "Risk Predictions",
          Risk_Category =classInt::findCols(ml_breaks),
          Risk_Category = case_when(
@@ -767,7 +769,7 @@ rbind(tree_KDE_sf, tree_risk_sf) %>%
     mapTheme(title_size = 14)
 
 ```
-These two maps indicate that our predicted calls are more spread out across the city than the actual density for 2019.
+These two maps indicate that our predicted calls are more spread out across the city than the actual density for 2019. Higher risk areas appear to be under-predicted and lower risk areas appear to be over-predicted. 
 
 
 ### Bar plot making this comparison.
@@ -791,13 +793,8 @@ rbind(tree_KDE_sf, tree_risk_sf) %>%
       theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
 
 ```
+This bar chart confirms this suspicion. 
 
-Two paragraphs on why or why not you would recommend your algorithm be put into production:
+I would not recommend this algorithm be used to predict where Street Tree 311 calls will be placed. The algorithm, when trained on 2018 data, failed to predict calls for 2019 data with acceptable accuracy. Though the average percent error was small, the map and bar chart above indicate that the algorithm over-estimates risk in the lower risk areas and underestimates risk in higher risk areas. This is the opposite of what one would want from such an algorithm.
 
-I would not recommend this algorithm be used to predict where Street Tree 311 calls will be placed. The algorithm, when trained on 2018 data, failed to predict calls for 2019 data with acceptable accuracy. Though the average percent error was small, the map and bar chart above indicate that the algorithm over-estimates risk in the lower risk areas and underestimates risk in higher risk areas. This is the opposite of what one would
-
-
-
-Using such predictions to inspect trees prior to issues arising with them might benefit the city. This amount of 'false positive' predictions, if used to send crews out preventatively, could lead to reductions in property damage and cost reductions to the city since fewer crews would be sent out on emergency removal jobs.
-
-After all, as the famous Ben Franklin quote goes, 'an ounce of prevention is worth a pound of cure.'
+Further undermining the effectiveness of this model is the fact that it underestimates the number of street tree 311 calls for majority non-white neighborhoods and overestimates the number of calls for majority white neighborhoods. In the interest of making preventative tree care more equitable, one would want to refine the model to produce predictions that are more evenly accurate across demographics.
