@@ -2,29 +2,356 @@
 title: "Targeting Housing Subsidy"
 author: "Oliver Atwood"
 date: "2023-10-27"
-output: html_document
+output: html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+### One paragraph on the motivation for the analysis.
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Connecting people in need of public services to those services is an effective way to address a range of urban issues. In the post-Reagan era, government agencies must work within shoestring budgets. It is therefore paramount that these agencies effectively target their outreach to maximize impact and minimize cost.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+## Loading Data
+
+```{r}
+palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
+palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
+palette3 <- c("#981FAC","#FF006A","#FE4C35")
+palette2 <- c("#981FAC","#FF006A")
+
+HousingSubsidy <- read.csv("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_7/TargetingHousingSubsidy/data/housingSubsidy.csv")
+
+# Filter the dataframe
+HousingSubsidy <- subset(HousingSubsidy, taxLien != 'yes')
+
+summary(HousingSubsidy)
 ```
 
-## Including Plots
+```{r}
+HousingSubsidy <- HousingSubsidy %>% 
+  mutate(EnterProgram = ifelse(y == 'yes', 1, 0)) %>% 
+  dplyr::select(-y_numeric)
+```
+### Develop and interpret data visualizations that describe feature importance/correlation.
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Exploring data
+```{r exploratory_continuous}
+HousingSubsidy %>%
+  dplyr::select(y, age, campaign, pdays, previous, unemploy_rate, cons.price.idx, cons.conf.idx, inflation_rate, spent_on_repairs) %>%
+  gather(Variable, value, -y) %>%
+    ggplot(aes(y, value, fill=y)) + 
+      geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+      labs(x="Click", y="Value", 
+           title = "Feature associations with the likelihood of Entering the Housing Assistance Program",
+           subtitle = "(continous outcomes)") +
+      theme(legend.position = "none")
+```
+From these bar plots, it appears that there are notable differences between No and Yes for camaign, inflation_rate, pdays, previous, and unemployment_rate. However, me must keep in mind that these are bar plots of the mean for each of these continuous variables, meaning that there may also be distinctions across the range of values for each variable that are not captured here. Let's make some line plots to reveal the continuous density for each of these variables.
+
+```{r exploratory_continuous_density, message = FALSE, warning = FALSE}
+HousingSubsidy %>%
+    dplyr::select(y, age, campaign, pdays, previous, unemploy_rate, cons.price.idx, cons.conf.idx, inflation_rate, spent_on_repairs) %>%
+    gather(Variable, value, -y) %>%
+    ggplot() + 
+    geom_density(aes(value, color=y), fill = "transparent") + 
+    facet_wrap(~Variable, scales = "free") +
+    scale_fill_manual(values = palette2) +
+    labs(title = "Feature distributions click vs. no click",
+         subtitle = "(continous outcomes)")
+```
+Of these 9 plots, inflation_rate appears to have the strongest distinction between individuals who enrolled in the program and those who did not. This density plot indicates that higher inflation rates are associated with lower enrollment and lower inflation rates are associated with higher enrollment.
+<br>
+Now let's examine the relationships between enrollment in the housing subsidy program and our categorical features.
+```{r exploratory_binary, message = FALSE, warning = FALS, fig.width=10}
+HousingSubsidy %>%
+    dplyr::select(y, job, marital, education, taxLien, mortgage, taxbill_in_phl, contact, month, day_of_week, campaign, poutcome) %>%
+    gather(Variable, value, -y) %>%
+    count(Variable, value, y) %>%
+      ggplot(., aes(value, n, fill = y)) +   
+        geom_bar(position = "dodge", stat="identity") +
+        facet_wrap(~Variable, scales="free") +
+        scale_fill_manual(values = palette2) +
+        labs(x="Click", y="Value",
+             title = "Feature associations with the likelihood of click",
+             subtitle = "Categorical features") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Create A Logistic Regression Model
+###Split your data into a 65/35 training/test set.
+
+```{r create_partition}
+set.seed(3456)
+trainIndex <- createDataPartition(HousingSubsidy$y, p = .65,
+                                  list = FALSE,
+                                  times = 1)
+SubsidyTrain <- HousingSubsidy[ trainIndex,]
+SubsidyTest  <- HousingSubsidy[-trainIndex,]
+
+```
+
+```{r run_model}
+SubsidyModel <- glm(EnterProgram ~ .,
+                  data=SubsidyTrain %>% 
+                    dplyr::select(-y, -X),
+                  family="binomial" (link="logit"))
+
+summary(SubsidyModel)
+
+```
+The 'kitchen sink' model gives us an AIC of 736.02. let's try to improve this.
+
+### Engineer new features that significantly increase the Sensitivity.
+
+```{r}
+HousingSubsidy2 <- HousingSubsidy %>% 
+  mutate(MarchOrNot = ifelse(month == "mar", 1, 0)) %>% 
+  mutate(SingleOrNot = ifelse(marital == "single", 1, 0)) %>% 
+  mutate(WedOrNot = ifelse(day_of_week == "wed", 1, 0)) %>% 
+  dplyr::select(-month, -job, -education, -marital, -taxLien, -pdays, -taxbill_in_phl, -mortgage, -campaign, -previous, -day_of_week, -X)
+```
+
+```{r create_partition}
+set.seed(3456)
+trainIndex2 <- createDataPartition(HousingSubsidy2$y, p = .65,
+                                  list = FALSE,
+                                  times = 1)
+SubsidyTrain2 <- HousingSubsidy2[ trainIndex2,]
+SubsidyTest2  <- HousingSubsidy2[-trainIndex2,]
+
+```
+
+```{r run_model}
+SubsidyModel2 <- glm(EnterProgram ~ .,
+                  data=SubsidyTrain2 %>% 
+                    dplyr::select(-y),
+                  family="binomial" (link="logit"))
+
+```
+
+### Interpret your new features in one paragraph.
+Given the outsized significance of the month of March, the day of the week of Wednesday, and single versus other marital statuses, I simplified these three categorical variables down to binaries: MarchOrNot, WedOrNot, and SingleOrNot, respectively. I then omitted the original columns they are derived from.
+
+
+### Show a regression summary for both the kitchen sink and your engineered regression.
+```{r}
+summary(SubsidyModel)
+
+summary(SubsidyModel2)
+
+```
+
+### Cross validate both models; compare and interpret two facetted plots of ROC, Sensitivity and Specificity.
+<br>
+# Make Predictions
+```{r testProbs}
+testProbs <- data.frame(Outcome = as.factor(SubsidyTest$EnterProgram),
+                        Probs = predict(SubsidyModel, SubsidyTest, type= "response"))
+
+testProbs2 <- data.frame(Outcome = as.factor(SubsidyTest2$EnterProgram),
+                        Probs = predict(SubsidyModel2, SubsidyTest2, type= "response"))
+
+```
+
+## Discussion 3
+
+Look at the plot of our predicted probabilities for our observed clickers (`1`) and non-clickers (`0`). **Write a sentence or two about how you think our model is performing.**
+
+```{r plot_testProbs, fig.width=10}
+plot1 <- ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
+  geom_density(alpha = 0.7) +
+  facet_grid(Outcome ~ .) +
+  scale_fill_manual(values = palette2) +
+  labs(x = "Click", y = "Density of probabilities",
+       title = "Distribution of predicted probabilities\nby observed outcome") +
+  theme(strip.text.x = element_text(size = 18),
+        legend.position = "none")
+
+plot2 <- ggplot(testProbs2, aes(x = Probs, fill = as.factor(Outcome))) + 
+  geom_density(alpha = 0.7) +
+  facet_grid(Outcome ~ .) +
+  scale_fill_manual(values = palette2) +
+  labs(x = "Click", y = "Density of probabilities",
+       title = "Distribution of predicted probabilities\nby observed outcome") +
+  theme(strip.text.x = element_text(size = 18),
+        legend.position = "none")
+
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+### Output an ROC curve for your new model and interpret it.
+
+# ROC Curve
+
+The ROC curve, gives us another visual "goodness of fit" metric. One that is a bit more tricky. You want to have a curve that is "above" the y=x line, which is where your prediction rates for positives and negatives are "no better than a coin flip". If it's too "square" - you are probably over fit. The Area-Under-The-Curve or "AUC" calculation below will help guide your understanding of the ROC curve
+
+```{r auc, message = FALSE, warning = FALSE}
+auc(testProbs2$Outcome, testProbs2$Probs)
+
+```
+
+```{r roc_curve, warning = FALSE, message = FALSE}
+ggplot(testProbs2, aes(d = as.numeric(Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - clickModel")
+```
+This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It is also not overfit, since it is 
+
+
+### Develop a cost benefit analysis.
+
+# Confusion Matrix
+
+Each threshold (e.g. a probability above which a prediction is a "click" and below which it's a "no click") has it's own rate of error. These errors can be classified in four ways for a binary model.
+
+A "confusion matrix" for the threshold of 50% shows us the rate at which we got True Positives (aka Sensitivity), False Positives, True Negatives (aka Specificity) and False Negatives for that threshold.
+
+```{r thresholds}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.25 , 1, 0)))
+```
+
+```{r confusion_matrix}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+
+```
+
+# Cost-Benefit Calculation
+
+```{r cost_benefit}
+cost_benefit_table <-
+   testProbs %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+       gather(Variable, Count) %>%
+       mutate(Revenue =
+               ifelse(Variable == "True_Negative", Count * 0,
+               ifelse(Variable == "True_Positive",((.35 - .1) * Count),
+               ifelse(Variable == "False_Negative", (-0.35) * Count,
+               ifelse(Variable == "False_Positive", (-0.1) * Count, 0))))) %>%
+    bind_cols(data.frame(Description = c(
+              "We correctly predicted no enrollment",
+              "We correctly predicted enrollment",
+              "We predicted no enrollment and person enrolled",
+              "We predicted enrollment and customer did not enroll")))
+
+kable(cost_benefit_table,
+       caption = "Cost/Benefit Table") %>% kable_styling()
+```
+
+Write out the cost/benefit equation for each confusion metric.
+
+False negatives are 0, true negatives are 0, false positives are -1, and true positives are 1.
+False negatives are 0, true negatives are 0, false positives are -2850, and true positives are -2850.
+
+2850*number of rows + 5000 number of enrollments
+
+Count successful enrollement in program (EnterProgam = 1) for HousingSubsidy, divide by total number of rows in HousingSubsidy.
+Compare that to true positive predicted enrollment * 0.25 divided by 
+
+count(HousingSubsidy) is the number of people who received outreach at random
+
+sum(HousingSubsidy$EnterProgram == 1) is the number of people who enrolled in the program.
+
+0.25 * sum(HousingSubsidy$EnterProgram == 1)) is the number of people who enrolled in the program and took the credit.
+
+Therefore, Overall Budget = Marketing Cost + Credit Dispensation
+Marketing Cost = (2850*count(HousingSubsidy))
+Credit Dispensation = (5000 * (0.25 * sum(HousingSubsidy$EnterProgram == 1)))
+
+Overall Budget = 2850 * 4118 + 5000 * 0.25 * 451
+
+Then we compare last year's cost for test data subset (5000 * .25 * sum(testProbs$Outcome == 1) + 2850 * count(testProbs))
+to this year's predicted cost for test data subset (5000 * 0.25 * sum(testProbs$predOutcome == 1) + 2850 * count(testProbs))
+
+Based on this, program costs will increase.
+
+Quality of life, however, is much harder to capture in cost-benefit calculations focused on quantities of money, so let's try taking money out of the equation.
+
+Let's instead compare the ratio of enrollment in the program to outreach made. If we assume that 
+
+
+```{r}
+samplerate <- 0.1
+
+set.seed(123)
+sampled_data1 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+
+set.seed(213)
+sampled_data2 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+
+set.seed(321)
+sampled_data3 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+
+enter1 <- sum(sampled_data1$EnterProgram == 1)/count(sampled_data1)
+enter2 <- sum(sampled_data2$EnterProgram == 1)/count(sampled_data2)
+enter3 <- sum(sampled_data3$EnterProgram == 1)/count(sampled_data3)
+
+
+# Average sample ratios
+sample_success_ratio <- (enter1 + enter2 + enter3)/3
+
+
+predict_success_ratio <- sum(testProbs$predOutcome == 1) / count(testProbs)
+
+sample_success_ratio
+predict_success_ratio
+
+```
+
+
+To understand the benefit, it is important to calculate the ratio of program uptake to outreach for targeted versus random outreach.
+Random Outreach Success Ratio = sum(sample of HousingSubsidy$Enterprogram == 1) / count(testProbs)
+Targeted Outreach Success Ratio = sum(testProbs$predOutcome == 1) / count(testProbs)
+
+is true positives from random mailer. 25% of that value take the credit and thereby cost 5000 each.
+
+We want to maximize true positives, because 25% of those will enroll in the program.
+
+Cost is 2850 per false positive and 7850 per 25% of true positive, benefit is 25% of true positive count. We are seeking to maximize true positives.
+
+
+
+Create the ‘Cost/Benefit Table’ as seen above.
+
+Plot the confusion metric outcomes for each Threshold.
+
+Create two small multiple plots that show Threshold as a function of Total_Revenue and Total_Count_of_Credits. Interpret this.
+
+Create a table of the Total_Revenue and Total_Count_of_Credits allocated for 2 categories. 50%_Threshold and your Optimal_Threshold.
+
+
+
+```{r goodness_metrics, message = FALSE, warning = FALSE}
+dplyr::select(cvFit$resample, -Resample) %>%
+  gather(metric, value) %>%
+  left_join(gather(cvFit$results[2:4], metric, mean)) %>%
+  ggplot(aes(value)) + 
+    geom_histogram(bins=35, fill = "#FF006A") +
+    facet_wrap(~metric) +
+    geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
+    scale_x_continuous(limits = c(0, 1)) +
+    labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
+         subtitle = "Across-fold mean reprented as dotted lines")
+
+```
+Conclude whether and why this model should or shouldn’t be put into production. What could make the model better? What would you do to ensure that the marketing materials 
+resulted in a better response rate?
