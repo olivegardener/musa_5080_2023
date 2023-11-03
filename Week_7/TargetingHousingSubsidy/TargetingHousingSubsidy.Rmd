@@ -9,6 +9,8 @@ output: html_document:
 ---
 
 ```{r setup, include=FALSE}
+rm(list=ls())
+
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -301,16 +303,16 @@ sampled_data2 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
 set.seed(321)
 sampled_data3 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
 
-enter1 <- sum(sampled_data1$EnterProgram == 1)/count(sampled_data1)
-enter2 <- sum(sampled_data2$EnterProgram == 1)/count(sampled_data2)
-enter3 <- sum(sampled_data3$EnterProgram == 1)/count(sampled_data3)
+enter1 <- sum(sampled_data1$EnterProgram == 1) / nrow(sampled_data1)
+enter2 <- sum(sampled_data2$EnterProgram == 1) / nrow(sampled_data2)
+enter3 <- sum(sampled_data3$EnterProgram == 1) / nrow(sampled_data3)
 
 
 # Average sample ratios
 sample_success_ratio <- (enter1 + enter2 + enter3)/3
 
 
-predict_success_ratio <- sum(testProbs$predOutcome == 1) / count(testProbs)
+predict_success_ratio <- sum(testProbs$predOutcome == 1) / nrow(testProbs)
 
 sample_success_ratio
 predict_success_ratio
