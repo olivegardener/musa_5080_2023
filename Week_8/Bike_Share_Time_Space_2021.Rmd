@@ -54,6 +54,10 @@ library(gridExtra)
 library(knitr)
 library(kableExtra)
 library(RSocrata)
+library(conflicted)
+
+select <- dplyr::select
+filter <- dplyr::filter
 
 plotTheme <- theme(
   plot.title =element_text(size=12),
@@ -162,7 +166,7 @@ chicagoCensus <-
          Num_Commuters = B08012_001E,
          Means_of_Transport = B08301_001E,
          Total_Public_Trans = B08301_010E) %>%
-  select(Total_Pop, Med_Inc, White_Pop, Travel_Time,
+  dplyr::select(Total_Pop, Med_Inc, White_Pop, Travel_Time,
          Means_of_Transport, Total_Public_Trans,
          Med_Age,
          GEOID, geometry) %>%
@@ -176,7 +180,7 @@ chicagoTracts <-
   chicagoCensus %>%
   as.data.frame() %>%
   distinct(GEOID, .keep_all = TRUE) %>%
-  select(GEOID, geometry) %>% 
+  dplyr::select(GEOID, geometry) %>% 
   st_sf
 
 ```
@@ -196,7 +200,7 @@ dat_census <- st_join(dat2 %>%
   mutate(from_longitude = unlist(map(geometry, 1)),
          from_latitude = unlist(map(geometry, 2)))%>%
   as.data.frame() %>%
-  select(-geometry)%>%
+  dplyr::select(-geometry)%>%
   st_as_sf(., coords = c("to_longitude", "to_latitude"), crs = 4326) %>%
   st_join(., chicagoTracts %>%
             st_transform(crs=4326),
@@ -206,7 +210,7 @@ dat_census <- st_join(dat2 %>%
   mutate(to_longitude = unlist(map(geometry, 1)),
          to_latitude = unlist(map(geometry, 2)))%>%
   as.data.frame() %>%
-  select(-geometry)
+  dplyr::select(-geometry)
 ```
 
 ## 2.4. Import Weather Data
@@ -235,7 +239,7 @@ glimpse(weather.Panel)
 ```{r plot_weather, catche = TRUE}
 grid.arrange(
   ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
-  labs(title="Percipitation", x="Hour", y="Perecipitation") + plotTheme,
+  labs(title="Percipitation", x="Hour", y="Precipitation") + plotTheme,
   ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
     labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme,
   ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
@@ -359,7 +363,7 @@ study.panel <-
   expand.grid(interval60=unique(dat_census$interval60), 
               from_station_id = unique(dat_census$from_station_id)) %>%
   left_join(., dat_census %>%
-              select(from_station_id, from_station_name, Origin.Tract, from_longitude, from_latitude )%>%
+              dplyr::select(from_station_id, from_station_name, Origin.Tract, from_longitude, from_latitude )%>%
               distinct() %>%
               group_by(from_station_id) %>%
               slice(1))
