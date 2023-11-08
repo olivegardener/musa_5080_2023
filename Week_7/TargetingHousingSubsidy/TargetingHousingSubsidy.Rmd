@@ -12,6 +12,20 @@ output: html_document:
 rm(list=ls())
 
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(kableExtra)
+library(caret)
+library(knitr) 
+library(pscl)
+library(plotROC)
+library(pROC)
+library(lubridate)
+library(gridExtra)
+library(cowplot)
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
 ```
 
 ### One paragraph on the motivation for the analysis.
@@ -213,6 +227,60 @@ ggplot(testProbs2, aes(d = as.numeric(Outcome), m = Probs)) +
 This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It is also not overfit, since it is 
 
 
+# Cross Validation
+
+```{r cv1}
+ctrl1 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+cvFit1 <- train(y ~ .,
+                  data=HousingSubsidy %>% 
+                    dplyr::select(-EnterProgram, -X), 
+                method="glm", family="binomial",
+                metric="ROC", trControl = ctrl1)
+
+cvFit1
+```
+```{r goodness_metrics1, message = FALSE, warning = FALSE}
+dplyr::select(cvFit1$resample, -Resample) %>%
+  gather(metric, value) %>%
+  left_join(gather(cvFit1$results[2:4], metric, mean)) %>%
+  ggplot(aes(value)) + 
+    geom_histogram(bins=35, fill = "#FF006A") +
+    facet_wrap(~metric) +
+    geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
+    scale_x_continuous(limits = c(0, 1)) +
+    labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
+         subtitle = "Across-fold mean reprented as dotted lines")
+
+```
+
+```{r cv2}
+ctrl2 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+cvFit2 <- train(y ~ .,
+                  data=HousingSubsidy2 %>% 
+                    dplyr::select(-EnterProgram), 
+                method="glm", family="binomial",
+                metric="ROC", trControl = ctrl2)
+
+cvFit2
+```
+
+```{r goodness_metrics2, message = FALSE, warning = FALSE}
+dplyr::select(cvFit2$resample, -Resample) %>%
+  gather(metric, value) %>%
+  left_join(gather(cvFit2$results[2:4], metric, mean)) %>%
+  ggplot(aes(value)) + 
+    geom_histogram(bins=35, fill = "#FF006A") +
+    facet_wrap(~metric) +
+    geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
+    scale_x_continuous(limits = c(0, 1)) +
+    labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
+         subtitle = "Across-fold mean reprented as dotted lines")
+
+```
+
+
 ### Develop a cost benefit analysis.
 
 # Confusion Matrix
@@ -222,22 +290,30 @@ Each threshold (e.g. a probability above which a prediction is a "click" and bel
 A "confusion matrix" for the threshold of 50% shows us the rate at which we got True Positives (aka Sensitivity), False Positives, True Negatives (aka Specificity) and False Negatives for that threshold.
 
 ```{r thresholds}
-testProbs <- 
-  testProbs %>%
-  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.25 , 1, 0)))
+testProbs2 <- 
+  testProbs2 %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
 ```
 
 ```{r confusion_matrix}
-caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+caret::confusionMatrix(testProbs2$predOutcome, testProbs2$Outcome, 
                        positive = "1")
 
 ```
 
 # Cost-Benefit Calculation
 
+Write out the cost/benefit equation for each confusion metric.
+
+We define negative value investments as the marketing and administrative costs associated with outreach to individuals. We define positive value investments as the awarding of a credit to an individual, minus the marketing and administrative cost associated with it. 
+- True negative revenue “Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.”: -\$0
+- True positive revenue “Predicted correctly homeowner would enter credit program; allocated the marketing resources, and 25% ultimately achieved the credit”: -\$2,850 + \$5,000 = \$2,150 return for 25% of cases that take the credit. -\$2,850 for 75% of cases who did not take the credit.
+- False negative revenue “We predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign”: \$0
+- False positive revenue “Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.”: -\$2,850
+
 ```{r cost_benefit}
 cost_benefit_table <-
-   testProbs %>%
+   testProbs2 %>%
       count(predOutcome, Outcome) %>%
       summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
                 True_Positive = sum(n[predOutcome==1 & Outcome==1]),
@@ -246,9 +322,9 @@ cost_benefit_table <-
        gather(Variable, Count) %>%
        mutate(Revenue =
                ifelse(Variable == "True_Negative", Count * 0,
-               ifelse(Variable == "True_Positive",((.35 - .1) * Count),
-               ifelse(Variable == "False_Negative", (-0.35) * Count,
-               ifelse(Variable == "False_Positive", (-0.1) * Count, 0))))) %>%
+               ifelse(Variable == "True_Positive", (Count * .25 * (-2850+5000)) + (Count * .75 * -2850),
+               ifelse(Variable == "False_Negative", Count * 0,
+               ifelse(Variable == "False_Positive", (Count * -2850), 0))))) %>%
     bind_cols(data.frame(Description = c(
               "We correctly predicted no enrollment",
               "We correctly predicted enrollment",
@@ -259,76 +335,156 @@ kable(cost_benefit_table,
        caption = "Cost/Benefit Table") %>% kable_styling()
 ```
 
-Write out the cost/benefit equation for each confusion metric.
+```{r threshold}
 
-False negatives are 0, true negatives are 0, false positives are -1, and true positives are 1.
-False negatives are 0, true negatives are 0, false positives are -2850, and true positives are -2850.
+whichThreshold <- 
+  iterateThresholds(
+     data=testProbs2, observedClass = Outcome, predictedProbs = Probs)
 
-2850*number of rows + 5000 number of enrollments
+whichThreshold[1:5,]
 
-Count successful enrollement in program (EnterProgam = 1) for HousingSubsidy, divide by total number of rows in HousingSubsidy.
-Compare that to true positive predicted enrollment * 0.25 divided by 
+whichThreshold <- 
+  whichThreshold %>%
+    dplyr::select(starts_with("Count"), Threshold) %>%
+    gather(Variable, Count, -Threshold) %>%
+    mutate(Revenue =
+             case_when(Variable == "Count_TN"  ~ Count * 0,
+                       Variable == "Count_TP"  ~ (Count * .25 * (-2850+5000)) + (Count * .75 * -2850) +
+                                                 (-32 * (Count * .50)),
+                       Variable == "Count_FN"  ~ Count * 0,
+                       Variable == "Count_FP"  ~ (Count * -2850)))
 
-count(HousingSubsidy) is the number of people who received outreach at random
-
-sum(HousingSubsidy$EnterProgram == 1) is the number of people who enrolled in the program.
-
-0.25 * sum(HousingSubsidy$EnterProgram == 1)) is the number of people who enrolled in the program and took the credit.
-
-Therefore, Overall Budget = Marketing Cost + Credit Dispensation
-Marketing Cost = (2850*count(HousingSubsidy))
-Credit Dispensation = (5000 * (0.25 * sum(HousingSubsidy$EnterProgram == 1)))
-
-Overall Budget = 2850 * 4118 + 5000 * 0.25 * 451
-
-Then we compare last year's cost for test data subset (5000 * .25 * sum(testProbs$Outcome == 1) + 2850 * count(testProbs))
-to this year's predicted cost for test data subset (5000 * 0.25 * sum(testProbs$predOutcome == 1) + 2850 * count(testProbs))
-
-Based on this, program costs will increase.
-
-Quality of life, however, is much harder to capture in cost-benefit calculations focused on quantities of money, so let's try taking money out of the equation.
-
-Let's instead compare the ratio of enrollment in the program to outreach made. If we assume that 
-
-
-```{r}
-samplerate <- 0.1
-
-set.seed(123)
-sampled_data1 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
-
-set.seed(213)
-sampled_data2 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
-
-set.seed(321)
-sampled_data3 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
-
-enter1 <- sum(sampled_data1$EnterProgram == 1) / nrow(sampled_data1)
-enter2 <- sum(sampled_data2$EnterProgram == 1) / nrow(sampled_data2)
-enter3 <- sum(sampled_data3$EnterProgram == 1) / nrow(sampled_data3)
-
-
-# Average sample ratios
-sample_success_ratio <- (enter1 + enter2 + enter3)/3
-
-
-predict_success_ratio <- sum(testProbs$predOutcome == 1) / nrow(testProbs)
-
-sample_success_ratio
-predict_success_ratio
+whichThreshold %>%
+  ggplot(.,aes(Threshold, Revenue, colour = Variable)) +
+  geom_point() +
+  scale_colour_manual(values = palette5[c(5, 1:3)]) +    
+  labs(title = "Revenue by confusion matrix type and threshold",
+       y = "Revenue") +
+  plotTheme() +
+  guides(colour=guide_legend(title = "Confusion Matrix")) 
 
 ```
 
+!!!!!These don't include false negatives FYI!!!!!
 
-To understand the benefit, it is important to calculate the ratio of program uptake to outreach for targeted versus random outreach.
-Random Outreach Success Ratio = sum(sample of HousingSubsidy$Enterprogram == 1) / count(testProbs)
-Targeted Outreach Success Ratio = sum(testProbs$predOutcome == 1) / count(testProbs)
+```{r threshold rev plot}
 
-is true positives from random mailer. 25% of that value take the credit and thereby cost 5000 each.
+whichThreshold_revenue <- 
+  whichThreshold %>% 
+    mutate(Count = ifelse(Variable == "Count_TP", (Count * .25),0)) %>% 
+    group_by(Threshold) %>% 
+    summarize(Total_Revenue = sum(Revenue),
+              Total_Count_of_Credits = sum(Count))
 
-We want to maximize true positives, because 25% of those will enroll in the program.
+whichThreshold_revenue
 
-Cost is 2850 per false positive and 7850 per 25% of true positive, benefit is 25% of true positive count. We are seeking to maximize true positives.
+fiftyThreshold = whichThreshold_revenue[50,]
+optimalThreshold = whichThreshold_revenue[13,]
+tableThreshold = rbind(fiftyThreshold, optimalThreshold)
+
+
+
+rev_threshold <- whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue) %>%
+  gather(Variable, Value, -Threshold) %>%
+  ggplot(aes(Threshold, Value, colour = Variable)) +
+    geom_point() +
+    geom_vline(xintercept = pull(arrange(optimalThreshold, -Total_Revenue)[1,1])) +
+    scale_colour_manual(values = palette2) +
+    plotTheme() +
+    theme(legend.position = "none") +
+    labs(title = "Total Investment Cost",
+         subtitle = "Vertical line denotes chosen optimal threshold")
+
+count_threshold <- whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Count_of_Credits) %>%
+  gather(Variable, Value, -Threshold) %>%
+  ggplot(aes(Threshold, Value, colour = Variable)) +
+    geom_point() +
+    geom_vline(xintercept = pull(arrange(optimalThreshold, -Total_Count_of_Credits)[1,1])) +
+    scale_colour_manual(values = palette2) +
+    plotTheme() +
+    theme(legend.position = "none") +
+    labs(title = "Total Count of Credits",
+         subtitle = "Vertical line denotes chosen optimal credits")
+
+plot_grid(rev_threshold, count_threshold, ncol = 1, align = "v")
+```
+
+```{r table}
+
+tableThreshold %>% kbl() %>% kable_minimal()
+
+```
+
+<!-- False negatives are 0, true negatives are 0, false positives are -1, and true positives are 1. -->
+<!-- False negatives are 0, true negatives are 0, false positives are -2850, and true positives are -2850. -->
+
+<!-- 2850*number of rows + 5000 number of enrollments -->
+
+<!-- Count successful enrollement in program (EnterProgam = 1) for HousingSubsidy, divide by total number of rows in HousingSubsidy. -->
+<!-- Compare that to true positive predicted enrollment * 0.25 divided by  -->
+
+<!-- count(HousingSubsidy) is the number of people who received outreach at random -->
+
+<!-- sum(HousingSubsidy$EnterProgram == 1) is the number of people who enrolled in the program. -->
+
+<!-- 0.25 * sum(HousingSubsidy$EnterProgram == 1)) is the number of people who enrolled in the program and took the credit. -->
+
+<!-- Therefore, Overall Budget = Marketing Cost + Credit Dispensation -->
+<!-- Marketing Cost = (2850*count(HousingSubsidy)) -->
+<!-- Credit Dispensation = (5000 * (0.25 * sum(HousingSubsidy$EnterProgram == 1))) -->
+
+<!-- Overall Budget = 2850 * 4118 + 5000 * 0.25 * 451 -->
+
+<!-- Then we compare last year's cost for test data subset (5000 * .25 * sum(testProbs$Outcome == 1) + 2850 * count(testProbs)) -->
+<!-- to this year's predicted cost for test data subset (5000 * 0.25 * sum(testProbs$predOutcome == 1) + 2850 * count(testProbs)) -->
+
+<!-- Based on this, program costs will increase. -->
+
+<!-- Quality of life, however, is much harder to capture in cost-benefit calculations focused on quantities of money, so let's try taking money out of the equation. -->
+
+<!-- Let's instead compare the ratio of enrollment in the program to outreach made. If we assume that  -->
+
+
+# ```{r}
+# samplerate <- 0.1
+# 
+# set.seed(123)
+# sampled_data1 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+# 
+# set.seed(213)
+# sampled_data2 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+# 
+# set.seed(321)
+# sampled_data3 <- HousingSubsidy %>% sample_n(samplerate * nrow(HousingSubsidy))
+# 
+# enter1 <- sum(sampled_data1$EnterProgram == 1) / nrow(sampled_data1)
+# enter2 <- sum(sampled_data2$EnterProgram == 1) / nrow(sampled_data2)
+# enter3 <- sum(sampled_data3$EnterProgram == 1) / nrow(sampled_data3)
+# 
+# 
+# # Average sample ratios
+# sample_success_ratio <- (enter1 + enter2 + enter3)/3
+# 
+# 
+# predict_success_ratio <- sum(testProbs$predOutcome == 1) / nrow(testProbs)
+# 
+# sample_success_ratio
+# predict_success_ratio
+# 
+# ```
+
+
+<!-- To understand the benefit, it is important to calculate the ratio of program uptake to outreach for targeted versus random outreach. -->
+<!-- Random Outreach Success Ratio = sum(sample of HousingSubsidy$Enterprogram == 1) / count(testProbs) -->
+<!-- Targeted Outreach Success Ratio = sum(testProbs$predOutcome == 1) / count(testProbs) -->
+
+<!-- is true positives from random mailer. 25% of that value take the credit and thereby cost 5000 each. -->
+
+<!-- We want to maximize true positives, because 25% of those will enroll in the program. -->
+
+<!-- Cost is 2850 per false positive and 7850 per 25% of true positive, benefit is 25% of true positive count. We are seeking to maximize true positives. -->
 
 
 
@@ -342,18 +498,5 @@ Create a table of the Total_Revenue and Total_Count_of_Credits allocated for 2 c
 
 
 
-```{r goodness_metrics, message = FALSE, warning = FALSE}
-dplyr::select(cvFit$resample, -Resample) %>%
-  gather(metric, value) %>%
-  left_join(gather(cvFit$results[2:4], metric, mean)) %>%
-  ggplot(aes(value)) + 
-    geom_histogram(bins=35, fill = "#FF006A") +
-    facet_wrap(~metric) +
-    geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
-    scale_x_continuous(limits = c(0, 1)) +
-    labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
-         subtitle = "Across-fold mean reprented as dotted lines")
-
-```
 Conclude whether and why this model should or shouldn’t be put into production. What could make the model better? What would you do to ensure that the marketing materials 
 resulted in a better response rate?
