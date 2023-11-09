@@ -117,7 +117,6 @@ Let's read in the month of May, 2018 using `read.socrata` and a SQL query. The w
 **Take a closer look at the `read.socrata` call and see where there are dates and times in the SQL code.**
 
 ```{r read_dat }
-# dat <- read.socrata("https://data.cityofchicago.org/resource/fg6s-gzvg.csv?$where=start_time%20between%20%272018-05-1T12:00:00%27%20and%20%272018-05-31T14:00:00%27")
 dat <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_8/Philly%20Bike%20Share/data/indego-trips-2023-q2.csv")
 
 ```
@@ -125,7 +124,18 @@ dat <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/m
 We can take a look at our data to see the format and names of all of our columns using the `glimpse` command.
 
 ```{r glimpse_dat, echo=FALSE, eval= FALSE }
-glimpse(dat)
+# Convert 'start_time' to POSIXct date-time format
+dat$start_time <- mdy_hm(dat$start_time)
+
+# Define the start and end dates
+start_date <- as.Date("2023-05-01")
+end_date <- as.Date("2023-06-04")
+
+# Filter the rows between the start and end dates
+dat2 <- dat %>%
+  filter(start_time >= start_date & start_time <= end_date)
+
+
 ```
 
 Let's use some date parsing to bin" the data by 15 and 60 minute intervals by rounding. 
@@ -133,7 +143,7 @@ Let's use some date parsing to bin" the data by 15 and 60 minute intervals by ro
 Notice we use the time format `ymd_hms` to denote year, month, day and hour, minute and seccond. We extract the `week` of the observation (ranging from 1-52 throughout the year) and the `dotw` for day of the week.
 
 ```{r time_bins }
-dat2 <- dat %>%
+dat2 <- dat2 %>%
   mutate(interval60 = floor_date(mdy_hm(start_time), unit = "hour"),
          interval15 = floor_date(mdy_hm(start_time), unit = "15 mins"),
          week = week(interval60),
@@ -229,7 +239,7 @@ These data can also be categorized as a part of an exploration of the relationsh
 
 ```{r import_weather, message = FALSE, warning = FALSE }
 weather.Panel <- 
-  riem_measures(station = "PHL", date_start = "2023-05-14", date_end = "2023-06-30") %>%
+  riem_measures(station = "PHL", date_start = "2023-05-01", date_end = "2023-06-04") %>%
   dplyr::select(valid, tmpf, p01i, sknt)%>%
   replace(is.na(.), 0) %>%
     mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
@@ -352,7 +362,7 @@ ggplot()+
   ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
   xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
   facet_grid(weekend ~ time_of_day)+
-  labs(title="Bike share trips per hr by station. Philadelphia, May, 2018")+
+  labs(title="Bike share trips per hr by station. Philadelphia, May, 2024")+
   mapTheme
 ```
 
