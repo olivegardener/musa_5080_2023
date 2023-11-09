@@ -2,7 +2,8 @@
 title: "Targeting Housing Subsidy"
 author: "Oliver Atwood"
 date: "2023-10-27"
-output: html_document:
+output:
+  html_document:
     toc: true
     toc_float: true
     code_folding: hide
@@ -46,7 +47,6 @@ HousingSubsidy <- read.csv("https://raw.githubusercontent.com/olivegardener/musa
 # Filter the dataframe
 HousingSubsidy <- subset(HousingSubsidy, taxLien != 'yes')
 
-summary(HousingSubsidy)
 ```
 
 ```{r}
@@ -87,7 +87,7 @@ HousingSubsidy %>%
 Of these 9 plots, inflation_rate appears to have the strongest distinction between individuals who enrolled in the program and those who did not. This density plot indicates that higher inflation rates are associated with lower enrollment and lower inflation rates are associated with higher enrollment.
 <br>
 Now let's examine the relationships between enrollment in the housing subsidy program and our categorical features.
-```{r exploratory_binary, message = FALSE, warning = FALS, fig.width=10}
+```{r exploratory_binary, message = FALSE, warning = FALSE, fig.width=10}
 HousingSubsidy %>%
     dplyr::select(y, job, marital, education, taxLien, mortgage, taxbill_in_phl, contact, month, day_of_week, campaign, poutcome) %>%
     gather(Variable, value, -y) %>%
@@ -105,7 +105,7 @@ HousingSubsidy %>%
 ## Create A Logistic Regression Model
 ###Split your data into a 65/35 training/test set.
 
-```{r create_partition}
+```{r}
 set.seed(3456)
 trainIndex <- createDataPartition(HousingSubsidy$y, p = .65,
                                   list = FALSE,
@@ -115,13 +115,11 @@ SubsidyTest  <- HousingSubsidy[-trainIndex,]
 
 ```
 
-```{r run_model}
+```{r}
 SubsidyModel <- glm(EnterProgram ~ .,
                   data=SubsidyTrain %>% 
                     dplyr::select(-y, -X),
                   family="binomial" (link="logit"))
-
-summary(SubsidyModel)
 
 ```
 The 'kitchen sink' model gives us an AIC of 736.02. let's try to improve this.
@@ -136,7 +134,7 @@ HousingSubsidy2 <- HousingSubsidy %>%
   dplyr::select(-month, -job, -education, -marital, -taxLien, -pdays, -taxbill_in_phl, -mortgage, -campaign, -previous, -day_of_week, -X)
 ```
 
-```{r create_partition}
+```{r}
 set.seed(3456)
 trainIndex2 <- createDataPartition(HousingSubsidy2$y, p = .65,
                                   list = FALSE,
@@ -146,7 +144,7 @@ SubsidyTest2  <- HousingSubsidy2[-trainIndex2,]
 
 ```
 
-```{r run_model}
+```{r}
 SubsidyModel2 <- glm(EnterProgram ~ .,
                   data=SubsidyTrain2 %>% 
                     dplyr::select(-y),
@@ -214,6 +212,8 @@ summary(SubsidyModel2)
 summary(SubsidyModel3)
 
 ```
+Discuss the pitfalls of chasing significance values relative to real-world common-sense type variables.
+
 
 ### Cross validate both models; compare and interpret two facetted plots of ROC, Sensitivity and Specificity.
 <br>
@@ -229,34 +229,6 @@ testProbs3 <- data.frame(Outcome = as.factor(SubsidyTest3$EnterProgram),
                         Probs = predict(SubsidyModel2, SubsidyTest2, type= "response"))
 
 ```
-
-## Discussion 3
-
-Look at the plot of our predicted probabilities for our observed clickers (`1`) and non-clickers (`0`). **Write a sentence or two about how you think our model is performing.**
-
-```{r plot_testProbs, fig.width=10}
-plot1 <- ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
-  geom_density(alpha = 0.7) +
-  facet_grid(Outcome ~ .) +
-  scale_fill_manual(values = palette2) +
-  labs(x = "Click", y = "Density of probabilities",
-       title = "Distribution of predicted probabilities\nby observed outcome") +
-  theme(strip.text.x = element_text(size = 18),
-        legend.position = "none")
-
-plot2 <- ggplot(testProbs2, aes(x = Probs, fill = as.factor(Outcome))) + 
-  geom_density(alpha = 0.7) +
-  facet_grid(Outcome ~ .) +
-  scale_fill_manual(values = palette2) +
-  labs(x = "Click", y = "Density of probabilities",
-       title = "Distribution of predicted probabilities\nby observed outcome") +
-  theme(strip.text.x = element_text(size = 18),
-        legend.position = "none")
-
-grid.arrange(plot1, plot2, ncol=2)
-
-```
-
 
 ### Output an ROC curve for your new model and interpret it.
 
@@ -276,7 +248,7 @@ ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
   labs(title = "ROC Curve - Housing Subsidy Model")
 ```
-This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It is also not overfit, since it is 
+This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It also shows that the model is not over-fit, since the curve is a reasonable distance from the top left corner of the plot.
 
 
 # Cross Validation
@@ -432,9 +404,6 @@ whichThreshold %>%
 
 ```
 ### Create two small multiple plots that show Threshold as a function of Total_Revenue and Total_Count_of_Credits. Interpret this.
-
-!!!!!These don't include false negatives FYI!!!!!
-
 ```{r threshold rev plot}
 
 whichThreshold_revenue <- 
@@ -487,5 +456,5 @@ tableThreshold %>% kbl() %>% kable_minimal()
 ```
 
 
-Conclude whether and why this model should or shouldn’t be put into production. What could make the model better? What would you do to ensure that the marketing materials 
+### Conclude whether and why this model should or shouldn’t be put into production. What could make the model better? What would you do to ensure that the marketing materials 
 resulted in a better response rate?
