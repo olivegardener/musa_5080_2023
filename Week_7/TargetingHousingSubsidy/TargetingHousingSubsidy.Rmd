@@ -156,9 +156,47 @@ SubsidyModel2 <- glm(EnterProgram ~ .,
 
 ```{r}
 HousingSubsidy3 <- HousingSubsidy %>% 
-  mutate(SingleOrNot = ifelse(marital == "single", 1, 0)) %>% 
-  dplyr::select(-month, -job, -education, -marital, -taxLien, -pdays, -taxbill_in_phl, -mortgage, -campaign, -previous, -day_of_week, -X)
+  mutate(SingleOrNot = ifelse(marital == "single", 1, 0),
+         season = 
+           case_when(month == "dec" | month == "jan" | month == "feb"~ "Winter",
+                     month == "mar" | month == "apr" | month == "may"~ "Spring",
+                     month == "jun" | month == "jul" | month == "aug"~ "Summer",
+                     month == "sep" | month == "oct" | month == "nov"~ "Fall"
+           ),
+         campaign_cat = 
+           case_when(campaign == 1 ~ "one",
+                     campaign == 2 ~ "two",
+                     campaign == 3 ~ "three",
+                     campaign >= 4 ~ "four+"),
+         pdays_cat =
+           case_when(pdays == 999 ~ "No contact",
+                     pdays <= 14 ~ "Within 2 weeks",
+                     pdays > 14 & pdays <=30 ~ "Between 2 weeks and 1 month"),
+         inflation_split =
+           case_when(inflation_rate >= 3 ~ "3%+",
+                     inflation_rate < 3 ~ "<3%")
+         ) %>% 
+  dplyr::select(-month, -job, -education, -marital, -taxLien, -pdays, -taxbill_in_phl, -mortgage, -campaign, -previous, -day_of_week, -inflation_rate, -X)
 ```
+
+```{r create_partition}
+set.seed(3456)
+trainIndex3 <- createDataPartition(HousingSubsidy3$y, p = .65,
+                                  list = FALSE,
+                                  times = 1)
+SubsidyTrain3 <- HousingSubsidy3[ trainIndex3,]
+SubsidyTest3  <- HousingSubsidy3[-trainIndex3,]
+
+```
+
+```{r run_model}
+SubsidyModel3 <- glm(EnterProgram ~ .,
+                  data=SubsidyTrain3 %>% 
+                    dplyr::select(-y),
+                  family="binomial" (link="logit"))
+
+```
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 inflation rate above or below 3
 p_days as cat
@@ -173,6 +211,8 @@ summary(SubsidyModel)
 
 summary(SubsidyModel2)
 
+summary(SubsidyModel3)
+
 ```
 
 ### Cross validate both models; compare and interpret two facetted plots of ROC, Sensitivity and Specificity.
@@ -183,6 +223,9 @@ testProbs <- data.frame(Outcome = as.factor(SubsidyTest$EnterProgram),
                         Probs = predict(SubsidyModel, SubsidyTest, type= "response"))
 
 testProbs2 <- data.frame(Outcome = as.factor(SubsidyTest2$EnterProgram),
+                        Probs = predict(SubsidyModel2, SubsidyTest2, type= "response"))
+
+testProbs3 <- data.frame(Outcome = as.factor(SubsidyTest3$EnterProgram),
                         Probs = predict(SubsidyModel2, SubsidyTest2, type= "response"))
 
 ```
@@ -222,12 +265,12 @@ grid.arrange(plot1, plot2, ncol=2)
 The ROC curve, gives us another visual "goodness of fit" metric. One that is a bit more tricky. You want to have a curve that is "above" the y=x line, which is where your prediction rates for positives and negatives are "no better than a coin flip". If it's too "square" - you are probably over fit. The Area-Under-The-Curve or "AUC" calculation below will help guide your understanding of the ROC curve
 
 ```{r auc, message = FALSE, warning = FALSE}
-pROC::auc(testProbs2$Outcome, testProbs2$Probs)
+pROC::auc(testProbs3$Outcome, testProbs3$Probs)
 
 ```
 
 ```{r roc_curve, warning = FALSE, message = FALSE}
-ggplot(testProbs2, aes(d = as.numeric(Outcome), m = Probs)) +
+ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
   style_roc(theme = theme_grey) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
@@ -275,10 +318,22 @@ cvFit2 <- train(y ~ .,
 cvFit2
 ```
 
-```{r goodness_metrics2, message = FALSE, warning = FALSE}
-dplyr::select(cvFit2$resample, -Resample) %>%
+```{r cv3}
+ctrl3 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+cvFit3 <- train(y ~ .,
+                  data=HousingSubsidy3 %>% 
+                    dplyr::select(-EnterProgram), 
+                method="glm", family="binomial",
+                metric="ROC", trControl = ctrl3)
+
+cvFit3
+```
+
+```{r goodness_metrics3, message = FALSE, warning = FALSE}
+dplyr::select(cvFit3$resample, -Resample) %>%
   gather(metric, value) %>%
-  left_join(gather(cvFit2$results[2:4], metric, mean)) %>%
+  left_join(gather(cvFit3$results[2:4], metric, mean)) %>%
   ggplot(aes(value)) + 
     geom_histogram(bins=35, fill = "#FF006A") +
     facet_wrap(~metric) +
@@ -299,13 +354,13 @@ Each threshold (e.g. a probability above which a prediction is a "click" and bel
 A "confusion matrix" for the threshold of 50% shows us the rate at which we got True Positives (aka Sensitivity), False Positives, True Negatives (aka Specificity) and False Negatives for that threshold.
 
 ```{r thresholds}
-testProbs2 <- 
-  testProbs2 %>%
-  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+testProbs3 <- 
+  testProbs3 %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs3$Probs > 0.5 , 1, 0)))
 ```
 
 ```{r confusion_matrix}
-caret::confusionMatrix(testProbs2$predOutcome, testProbs2$Outcome, 
+caret::confusionMatrix(testProbs3$predOutcome, testProbs3$Outcome, 
                        positive = "1")
 
 ```
@@ -324,7 +379,7 @@ We define negative value investments as the marketing and administrative costs a
 
 ```{r cost_benefit}
 cost_benefit_table <-
-   testProbs2 %>%
+   testProbs3 %>%
       count(predOutcome, Outcome) %>%
       summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
                 True_Positive = sum(n[predOutcome==1 & Outcome==1]),
@@ -351,7 +406,7 @@ kable(cost_benefit_table,
 
 whichThreshold <- 
   iterateThresholds(
-     data=testProbs2, observedClass = Outcome, predictedProbs = Probs)
+     data=testProbs3, observedClass = Outcome, predictedProbs = Probs)
 
 whichThreshold[1:5,]
 
