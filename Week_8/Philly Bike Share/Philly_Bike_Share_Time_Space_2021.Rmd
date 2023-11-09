@@ -123,7 +123,7 @@ dat <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/m
 
 We can take a look at our data to see the format and names of all of our columns using the `glimpse` command.
 
-```{r glimpse_dat, echo=FALSE, eval= FALSE }
+```{r glimpse_dat, echo=FALSE}
 # Convert 'start_time' to POSIXct date-time format
 dat$start_time <- mdy_hm(dat$start_time)
 
@@ -132,7 +132,7 @@ start_date <- as.Date("2023-05-01")
 end_date <- as.Date("2023-06-04")
 
 # Filter the rows between the start and end dates
-dat2 <- dat %>%
+dat <- dat %>%
   filter(start_time >= start_date & start_time <= end_date)
 
 
@@ -143,7 +143,7 @@ Let's use some date parsing to bin" the data by 15 and 60 minute intervals by ro
 Notice we use the time format `ymd_hms` to denote year, month, day and hour, minute and seccond. We extract the `week` of the observation (ranging from 1-52 throughout the year) and the `dotw` for day of the week.
 
 ```{r time_bins }
-dat2 <- dat2 %>%
+dat2 <- dat %>%
   mutate(interval60 = floor_date(mdy_hm(start_time), unit = "hour"),
          interval15 = floor_date(mdy_hm(start_time), unit = "15 mins"),
          week = week(interval60),
