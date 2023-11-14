@@ -420,12 +420,12 @@ whichThreshold_revenue <-
     mutate(Count = ifelse(Variable == "Count_TP", (Count * .25),0)) %>% 
     group_by(Threshold) %>% 
     summarize(Total_Revenue = sum(Revenue),
-              Total_Count_of_Credits = sum(Count))
+              Total_Count_of_Credits = sum(Count)) 
 
 whichThreshold_revenue
 
 fiftyThreshold = whichThreshold_revenue[50,]
-optimalThreshold = whichThreshold_revenue[13,]
+optimalThreshold = whichThreshold_revenue[23,]
 tableThreshold = rbind(fiftyThreshold, optimalThreshold)
 
 
