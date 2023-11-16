@@ -14,6 +14,15 @@ output:
 
 2-3 paragraphs that introduce the reader to bike share and the need for re-balancing. How will re-balancing occur? Perhaps you will manage a small fleet of trucks to move bikes from here to there or perhaps you will offer rewards, discounts or other incentives for riders to move a bike from place to place. Keep in mind, your plan will inform the appropriate time lag features you can use. How far forward do you wish to predict for at any given time?
 
+
+Bikeshare is... here's why supply and demand is challenging and why it matters for bikeshare.
+
+the best way to balance bikes is to ride the rush hour peaks in reverse, bringing bikes from docks at fringe stations to core stations, since core stations have more churn.
+Gamify it through incentivizing riders to bring bikes back to their origin stations at the end of the day. 
+and incentivize users to move bikes from full stations to empty stations during off-peak hours to reduce need of trucks bringing bikes to and fro.
+
+Predicting two weeks into the future would balance the competing needs of accuracy and proactive scheduling of employees.
+
 ```{r setup, include=FALSE}
 rm(list=ls())
 
@@ -220,6 +229,7 @@ grid.arrange(
     labs(title="Temperature", x="Hour", y="Temperature") + plotTheme,
   top="Weather Data - Philadelphia PHL - May-June, 2023")
 ```
+Here is the weather data, showing how temp and wind speet are somewhat tied together and fluctuate with the day-night swing.
 
 # Describe and Explore the Data
 
@@ -235,7 +245,9 @@ ggplot(dat_census %>%
        y="Number of trips")+
   plotTheme
 ```
+This plot shows a relatively consistent daily oscillation, with two peaks on each day of the work week - one in the morning and a larger one in the evening rush hour.
 
+Also visible here is the relatively lower ridership on weekends. Particularly notable on May 13 and 20.
 ```{r mean_trips_hist, warning = FALSE, message = FALSE }
 dat_census %>%
         mutate(time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
@@ -288,6 +300,7 @@ ggplot(dat_census %>%
        y="Trip Counts")+
      plotTheme
 ```
+one peak on weekends versus two on weekdays. lower ridership on average on weekends. more need for balancing on weekdays. sunday evening is the most important time to rebalance
 
 ```{r origin_map }
 
@@ -314,7 +327,9 @@ ggplot()+
   mapTheme
 
 ```
+This multi-plot shows the need to balance stations by bringing bikes from stations at the fringe of the network to stations closer to the core, due to the fact that core stations will have more churn.
 
+This focus on trips by stations reflects features not otherwise captured in the model, such as amenities near each station. Given that amenities are fixed in both time and space, they are captured by station locations themselves rather than needing to be modeled explicitly. Inclusion of fixed amenities would result in mutli-colinearity, since the amenities do not vary across time.
 
 ## Create Space-Time Panel
 
@@ -489,29 +504,6 @@ week_predictions %>%
       plotTheme
 ```
 
-```{r errors_by_station, warning = FALSE, message = FALSE }
-week_predictions %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           start_station = map(data, pull, start_station), 
-           from_latitude = map(data, pull, from_latitude), 
-           from_longitude = map(data, pull, from_longitude)) %>%
-    select(interval60, start_station, from_longitude, from_latitude, Observed, Prediction, Regression) %>%
-    unnest() %>%
-  filter(Regression == "ETime_Space_FE_timeLags_holidayLags") %>%
-  group_by(start_station, from_longitude, from_latitude) %>%
-  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
-ggplot(.)+
-  geom_sf(data = phillyCensus, color = "grey", fill = "transparent")+
-  geom_point(aes(x = from_longitude, y = from_latitude, color = MAE), 
-             fill = "transparent", alpha = 0.4)+
-  scale_colour_viridis(direction = -1,
-  discrete = FALSE, option = "D")+
-  ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
-  xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
-  labs(title="Mean Abs Error, Test Set, Model 5")+
-  mapTheme
-```
-
 ## 5.2. Space-Time Error Evaluation
 
 ```{r obs_pred_all, warning=FALSE, message = FALSE, cache=TRUE}
@@ -541,7 +533,31 @@ week_predictions %>%
        y="Predicted trips")+
   plotTheme
 ```
+```{r errors_by_station, warning = FALSE, message = FALSE }
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station), 
+           from_latitude = map(data, pull, from_latitude), 
+           from_longitude = map(data, pull, from_longitude)) %>%
+    select(interval60, start_station, from_longitude, from_latitude, Observed, Prediction, Regression) %>%
+    unnest() %>%
+  filter(Regression == "ETime_Space_FE_timeLags_holidayLags") %>%
+  group_by(start_station, from_longitude, from_latitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+ggplot(.)+
+  geom_sf(data = phillyCensus, color = "grey", fill = "transparent")+
+  geom_point(aes(x = from_longitude, y = from_latitude, color = MAE), 
+             fill = "transparent", alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
+  xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
+  labs(title="Mean Abs Error, Test Set, Model 5")+
+  mapTheme
+```
+This plot shows higher errors at the core of the network than the fringe.
 
+If our MAE is 0.65, this means...
 ```{r station_summary, warning=FALSE, message = FALSE }
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
@@ -575,44 +591,7 @@ week_predictions %>%
   
 ```
 
-
-```{r station_summary2, warning=FALSE, message = FALSE }
-week_predictions %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           start_station = map(data, pull, start_station), 
-           from_latitude = map(data, pull, from_latitude), 
-           from_longitude = map(data, pull, from_longitude),
-           dotw = map(data, pull, dotw),
-           Percent_Taking_Public_Trans = map(data, pull, Percent_Taking_Public_Trans),
-           Med_Inc = map(data, pull, Med_Inc),
-           Percent_White = map(data, pull, Percent_White)) %>%
-    select(interval60, start_station, from_longitude, 
-           from_latitude, Observed, Prediction, Regression,
-           dotw, Percent_Taking_Public_Trans, Med_Inc, Percent_White) %>%
-    unnest() %>%
-  filter(Regression == "ETime_Space_FE_timeLags_holidayLags")%>%
-  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
-                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
-                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush")) %>%
-  filter(time_of_day == "AM Rush") %>%
-  group_by(start_station, Percent_Taking_Public_Trans, Med_Inc, Percent_White) %>%
-  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
-  gather(-start_station, -MAE, key = "variable", value = "value")%>%
-  ggplot(.)+
-  geom_point(aes(x = value, y = MAE), alpha = 0.4)+
-  geom_smooth(aes(x = value, y = MAE), method = "lm", se= FALSE)+
-  facet_wrap(~variable, scales = "free")+
-  labs(title="Errors as a function of socio-economic variables",
-       y="Mean Absolute Error (Trips)")+
-  plotTheme
-  
-```
-
-
-
-Use purrr to train and validate several models for comparison on the latter two week test set. Perform either random k-fold cross validation or LOGO-CV on the 5 week panel. You may choose to cross validate by time or space. Interpret your findings in the context of accuracy and generalizability.
+### Use purrr to train and validate several models for comparison on the latter two week test set. Perform either random k-fold cross validation or LOGO-CV on the 5 week panel. You may choose to cross validate by time or space. Interpret your findings in the context of accuracy and generalizability.
 
 
 ```{r cv}
@@ -633,17 +612,29 @@ model_cv <- train(Trip_Count ~ start_station + hour(interval60) + dotw + Tempera
 # View the results
 print(model_cv)
 
-mae_model["mae"] <- as.data.frame(model_cv$resample$MAE)
+mae_values["mae"] <- as.data.frame(model_cv$resample$MAE)
+# names(mae_values) <- "MAE"
 
-ggplot(data=mae_model,aes(mae_model$mae))+
-  geom_histogram(binwidth = .01)
+mean_mae <- mean(mae_values$mae)
+std_mae <- sd(mae_values$mae)
+
+ggplot(data = mae_values, aes(x = mae)) +
+  geom_histogram(binwidth = 0.001) +
+  geom_vline(xintercept = mean_mae, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean_mae + std_mae, color = "green", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean_mae - std_mae, color = "green", linetype = "dashed", size = 1)
 
 
 ```
+Tighter histogram would be more generalizable because it means our model is not producing significantly different results than those of the random samples.
+
 
 ## 6.1. Interpreting our predictions
 
 
 
-Conclude with how useful your algorithm is for the bike re-balancing plan.
+### Conclude with how useful your algorithm is for the bike re-balancing plan.
 
+Our model is not good enough because it is not great a capturing peak times. Comparing mae of the trip count to the mean of the trip count shows...
+
+Our data looks at May to June. Given the high number of higher education institutions in Philly, it is important to consider how the dip in the city's population will be reflected in ridership, particularly in areas of the city with higher proportions of students and univeristy buildings.
