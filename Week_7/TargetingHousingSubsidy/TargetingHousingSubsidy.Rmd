@@ -98,6 +98,7 @@ HousingSubsidy %>%
          subtitle = "(Continous Features)",
          x="Value", y="Density")
 ```
+
 These line plots visualize continuous variables. This reveals which ones have greater difference in values across the range of each variable, showing the degree of distinction between whether a given individual took the credit or did not.
 <br>
 Of these 9 plots, inflation_rate appears to have the strongest distinction between individuals who enrolled in the program and those who did not. This density plot indicates that higher inflation rates are associated with lower enrollment and lower inflation rates are associated with higher enrollment.
@@ -121,6 +122,7 @@ HousingSubsidy %>%
              subtitle = "Categorical Features") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
 These plots show differences across categorical variables.
 
 <!-- Beyond the numeric variables in our sample data, we can also explore relationships between categorical variables. For example, we see in the outcomes for the "contact" variable that participants appear to be more likely to join the program if they are contacted by cell phone as opposed to by telephone. With these variables, it is important to also compare across the category in addition to looking at the difference between outcomes.  -->
@@ -225,6 +227,7 @@ SubsidyModel3 <- glm(EnterProgram ~ .,
 
 
 ### Feature Engineering Interpretation
+
 In SubsidyModel2, the categorical variables with high levels of correlation were converted into binary variables and several variables of low significance were omitted. 
 Given the outsized significance of the month of March, the day of the week of Wednesday, and single versus other marital statuses, I simplified these three categorical variables down to binaries: MarchOrNot, WedOrNot, and SingleOrNot, respectively. I then omitted the original columns they are derived from.
 <br>
@@ -248,6 +251,7 @@ summary(SubsidyModel2)
 summary(SubsidyModel3)
 
 ```
+
 Discuss the pitfalls of chasing significance values relative to real-world common-sense type variables.
 
 <!-- We run all three of our models and compare AIC scores to see which model better reflects our data. The AIC score for the kitchen sink model is 1579, for the second model is 1551. and for the third model 1560. While the second model, with the engineering features for March or not and Wednesday or not, technically has the lowest score, we will use the third model for our analysis. The third model has a lower (and therefore better) AIC value compared to the kitchen sink model while using new features that could be considered more generalizable in different contexts.  -->
@@ -256,15 +260,10 @@ Discuss the pitfalls of chasing significance values relative to real-world commo
 
 Model 3 will be referred to as the engineered regression for the rest of this report.   -->
 
-
-### Cross validate both models; compare and interpret two facetted plots of ROC, Sensitivity and Specificity.
-<br>
-
-
-
-
-
 # Cross Validation
+
+Cross validate both models; compare and interpret two faceted plots of ROC, Sensitivity and Specificity.
+
 
 ```{r cv1}
 ctrl1 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -291,17 +290,17 @@ dplyr::select(cvFit1$resample, -Resample) %>%
 
 ```
 
-```{r cv2}
-ctrl2 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+<!-- ```{r cv2} -->
+<!-- ctrl2 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary) -->
 
-cvFit2 <- train(y ~ .,
-                  data=HousingSubsidy2 %>% 
-                    dplyr::select(-EnterProgram), 
-                method="glm", family="binomial",
-                metric="ROC", trControl = ctrl2)
+<!-- cvFit2 <- train(y ~ ., -->
+<!--                   data=HousingSubsidy2 %>%  -->
+<!--                     dplyr::select(-EnterProgram),  -->
+<!--                 method="glm", family="binomial", -->
+<!--                 metric="ROC", trControl = ctrl2) -->
 
-cvFit2
-```
+<!-- cvFit2 -->
+<!-- ``` -->
 
 ```{r cv3}
 ctrl3 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -334,7 +333,7 @@ The tighter each distribution is to its mean the more generalizable the model. T
 
 # ROC Curve
 
-## Make Predictions
+
 ```{r testProbs}
 testProbs <- data.frame(Outcome = as.factor(SubsidyTest$EnterProgram),
                         Probs = predict(SubsidyModel, SubsidyTest, type= "response"))
@@ -347,10 +346,14 @@ testProbs3 <- data.frame(Outcome = as.factor(SubsidyTest3$EnterProgram),
 
 ```
 
+## Area Under Curve
+
 ```{r auc, message = FALSE, warning = FALSE}
 pROC::auc(testProbs3$Outcome, testProbs3$Probs)
 
 ```
+
+## ROC Curve Plot
 
 ```{r roc_curve, warning = FALSE, message = FALSE}
 ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
@@ -359,6 +362,7 @@ ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
   labs(title = "ROC Curve - Housing Subsidy Model")
 ```
+
 This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It also shows that the model is not over-fit, since the curve is a reasonable distance from the top left corner of the plot. To test generalizability, let's do some cross-validation.
 
 <!-- The ROC curve is a reflection of our two most important metrics - true positive responses and false positive responses. False positives are people that we marketed to that did not attempt to enter the housing credit program.  -->
@@ -423,7 +427,7 @@ kable(cost_benefit_table,
 
 ### Confusion Metric Outcomes by Threshold
 
-```{r threshold}
+```{r threshold, warning=FALSE}
 
 whichThreshold <- 
   iterateThresholds(
@@ -467,7 +471,7 @@ whichThreshold_revenue <-
     summarize(Total_Revenue = sum(Revenue),
               Total_Count_of_Credits = sum(Count)) 
 
-whichThreshold_revenue
+#whichThreshold_revenue
 
 fiftyThreshold = whichThreshold_revenue[50,]
 optimalThreshold = whichThreshold_revenue[23,]
@@ -501,6 +505,7 @@ count_threshold <- whichThreshold_revenue %>%
 
 plot_grid(rev_threshold, count_threshold, ncol = 1, align = "v")
 ```
+
 These plots align to show the cost and number of credits awarded at each threshold. Costs decrease as less credits are awarded, especially between the 0.0 and 0.15 thresholds, which is a reflection of false positive predictions decreasing. 
 
 We also show what we determine to be the optimal threshold, which we discuss further in the following section. 
@@ -512,6 +517,7 @@ We also show what we determine to be the optimal threshold, which we discuss fur
 tableThreshold %>% kbl() %>% kable_minimal()
 
 ```
+
 <!-- We have chosen our optimal threshold to be 0.23. While the marginal cost per credit increases - the cost is four times greater for less than three times the credits compared to the 0.50 threshold - we believe that this threshold limits the steepest costs associated with a high number of false positive responses while effectively increasing the number of credits awarded.  -->
 
 # Conclusion
