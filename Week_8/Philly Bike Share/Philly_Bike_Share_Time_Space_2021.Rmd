@@ -288,29 +288,10 @@ ggplot(dat_census %>%
        y="Trip Counts")+
      plotTheme
 ```
-Richard's code from ed discussion
-```{r}
-# 
-# all_data_day <-
-#   dat_census %>%
-#   group_by(dotw,start_station,geometry) %>% summarise(sum_day_time = sum(sum_rides))
-# 
-# animate_map = ggplot()+
-#   geom_sf(data=all_data_day,aes(color=sum_day_time),size=1.2)+
-#   scale_color_viridis(name='Number of Rides')+
-#   transition_states(day)+
-#   ggtitle('Day: {frame_time}')
-#   
-# animate(animate_map,nframes=41)
-
-```
 
 ```{r origin_map }
 
-
-
-
-map<- ggplot()+
+ggplot()+
   geom_sf(data = phillyTracts %>%
           st_transform(crs=4326))+
   geom_point(data = dat_census %>% 
@@ -328,11 +309,10 @@ map<- ggplot()+
   discrete = FALSE, option = "D")+
   ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
   xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
-  transition_reveal(week)+
+  facet_grid(weekend ~ time_of_day)+
   labs(title="Bike share trips per hr by station. Philadelphia, May, 2024")+
   mapTheme
 
-animate(map,nframes=5)
 ```
 
 
@@ -637,12 +617,27 @@ Use purrr to train and validate several models for comparison on the latter two 
 
 ```{r cv}
 
-reg.spatialCV <- crossValidate(
-  dataset = fiveweekpanel,
-  id = "start_station",
-  dependentVariable = "dotw",
-  indVariables = reg.vars) %>%
-    dplyr::select(cvID = name, countBurglaries, Prediction, geometry)
+library(caret)
+
+control <- trainControl(method="cv", number=20)
+
+# Fit the model
+set.seed(123) # for reproducibility
+model_cv <- train(Trip_Count ~ start_station + hour(interval60) + dotw + Temperature + Precipitation +
+                   lagHour + lag2Hours +lag3Hours +lag12Hours + lag1day + holidayLag + holiday, 
+                  data=ride.panel,
+                  method="lm",
+                  trControl=control,
+                  na.action=na.pass)
+
+# View the results
+print(model_cv)
+
+mae_model["mae"] <- as.data.frame(model_cv$resample$MAE)
+
+ggplot(data=mae_model,aes(mae_model$mae))+
+  geom_histogram(binwidth = .01)
+
 
 ```
 
