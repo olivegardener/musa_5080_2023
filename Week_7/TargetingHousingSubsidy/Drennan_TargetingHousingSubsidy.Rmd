@@ -33,7 +33,7 @@ options(scipen = 999)
 
 # Introduction
 
-Governments are tasked with maintained a wide range of public services in a fiscally responsible manner. When proactive approaches to tax credit programs and connecting residents with the credits are taken, it's our job in the Department of Housing and Community Development to make sure that our approach is both efficient and effective. For this home repair tax credit program, this approach means reaching eligible homeowners and maximizing the financial benefit of the credit without overspending on the administrative costs of outreach and counseling. Historically, our outreach efforts have been ad-hoc. By using a modeling approaching with historical data, we will pursue a strategy of identifying homeowners who are most likely to complete the full application process and take the credit while minimizing the outreach we do to residents who are unlikely to take the credit, thereby wasting taxpayer dollars.
+Governments are tasked with maintaining a wide range of public services in a fiscally responsible manner. When proactive approaches to tax credit programs and connecting residents with the credits are taken, it's our job in the Department of Housing and Community Development to make sure that our approach is both efficient and effective. For this home repair tax credit program, this approach means reaching eligible homeowners and maximizing the financial benefit of the credit without overspending on the administrative costs of outreach and counseling. Historically, our outreach efforts have been ad-hoc. By using a modeling approaching with historical data, we will pursue a strategy of identifying homeowners who are most likely to complete the full application process and take the credit while minimizing the outreach we do to residents who are unlikely to take the credit, thereby wasting taxpayer dollars.
 
 # Data
 
@@ -56,7 +56,7 @@ HousingSubsidy <- HousingSubsidy %>%
   dplyr::select(-y_numeric)
 ```
 
-Our data is based on previous records of outreach and outcomes. We will seek to build a model that effectively targets eligible homeowners by finding characteristics, or variables, that will make them more likely to enter the program and take the credit.
+Our data is based on previous records of outreach and outcomes. We will seek to build a model that effectively targets eligible homeowners by finding characteristics (i.e. variables) that will make them more likely to enter the program and take the credit.
 
 ## Exploring data
 
@@ -74,7 +74,7 @@ HousingSubsidy %>%
       theme(legend.position = "none")
 ```
 
-We start by plotting the numerical variables in bar plots. We're most interested in variables that show a sizable contrast between no (did not enter program) and yes (did enter program) such as "previous", because those features are more likely to better predict the outcomes of the homeowner taking the credit. A variable with nearly equal values for no and yes is more of a coin flip scenario as to whether someone will join the program or not based on that characteristic. However, these bar plots only capture the mean value per category of the responses from everyone in our sample. We will instead plot all responses ver variable on density graphs below.
+We start by plotting the numerical variables in bar plots. We're most interested in variables that show a sizable contrast between no (did not enter program) and yes (did enter program) such as "previous", because those features are more likely to better predict the outcomes of the homeowner taking the credit. A variable with nearly equal values for no and yes is more of a coin flip scenario as to whether someone will join the program or not based on that characteristic. However, these bar plots only capture the mean value per category of the responses from everyone in our sample. We will instead plot all responses p1er variable on density graphs below.
 
 ```{r exploratory_continuous_density, message = FALSE, warning = FALSE}
 HousingSubsidy %>%
@@ -335,7 +335,7 @@ ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
 
 The ROC curve is a reflection of our two most important metrics - true positive responses and false positive responses. False positives are people that we marketed to that did not attempt to enter the housing credit program.
 
-This curve allows us to understand the different thresholds of correctly versus incorrectly predicting that someone will enter the program. Our goal is for the area under the curve of our line of predicted outcome thresholds to be near 1 but not at 1. A value of 1 means that we're overfitting the model, meaning it is not generalizable to new data. We also want to be above the diagonal line, which represents 0.5 - in other words, a coin flip of correctly predicting the outcome or predicting worse that a coin flip if below that line.
+This curve allows us to understand the different thresholds of correctly versus incorrectly predicting that someone will enter the program. Our goal is for the area under the curve of our line of predicted outcome thresholds to be near 1 but not at 1. A value of 1 indicates that we're overfitting the data, meaning it is not generalizable to new data. We also want to be above the diagonal line, which represents 0.5 - in other words, a coin flip of correctly predicting the outcome or predicting worse that a coin flip if below that line.
 
 # Cost Benefit Analysis
 
@@ -488,10 +488,10 @@ We have chosen our optimal threshold to be 0.23. While the marginal cost per cre
 
 # Conclusion
 
-Our model is effective at limiting the number of false positive predictions, which are the worst outcome for our marketing program. Our department's money is better spent on the credits themselves, positive investments worth \$5,000 for home repairs, versus the marketing and administrative costs of \$2,850 per homeowner.
+Our model is effective at limiting the number of false positive predictions, which are the worst outcome for our marketing program. Our department's money is better spent on the credits themselves - positive investments worth \$5,000 for home repairs - versus the marketing and administrative costs of \$2,850 per homeowner.
 
 Academic research has found that homeowners who enter the program and take the credit see an average increase in value of \$10,000, with nearby homes surrounding the property seeing an average aggregate premium of \$56,000. While these premiums are substantial and show the value of these subsidies we offer, we can't account for them directly in our model because they are benefits outside the model that are dependent on when the homeowner chooses to conduct a transaction.
 
-Our model could be improved and optimized if we were given a budget for the total amount of money that the HCD can spend on this credit program - the thresholds can then be selected based on costs that adhere to this budget. Additionally, spatial information in our data set would allow us to see if certain areas, either based on geography or demographics if we pull in Census data, are clustered in any meaningful way. If we find that certain areas are less likely to respond join the program but ultimately not take the credit, we can adjust our marketing and administrative processes to better target those populations with our outreach.
+Our model could be improved and optimized if we were given a budget for the total amount of money that the HCD can spend on this credit program - the thresholds can then be selected based on costs that adhere to this budget. Additionally, spatial information in our data set would allow us to see if certain areas, either based on geography or demographics if we pull in Census data, are clustered in any meaningful way. If we find that certain groups are more likely to join the program but ultimately not take the credit, we can adjust our marketing and administrative processes to better target those populations with our outreach.
 
 Additionally, we should find ways to limit the administrative costs and decrease the percentage of people who do not take the credit after entering the program. Considering we have a number of people who ultimately don't receive the credit due to issues like faulty paperwork, our counseling and information sessions should be made more effective. With how much we are spending per homeowner, more emphasis should be placed on individual reviews or assistance to iron out these issues.

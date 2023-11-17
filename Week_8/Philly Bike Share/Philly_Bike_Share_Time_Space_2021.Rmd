@@ -612,6 +612,8 @@ model_cv <- train(Trip_Count ~ start_station + hour(interval60) + dotw + Tempera
 # View the results
 print(model_cv)
 
+mae_values=as.data.frame(model_cv$resample$MAE)
+
 mae_values["mae"] <- as.data.frame(model_cv$resample$MAE)
 # names(mae_values) <- "MAE"
 
