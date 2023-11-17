@@ -1,0 +1,636 @@
+---
+title: "Bike Share Prediction Model for Philadelphia"
+author: "Dave Drennan"
+date: "November 17, 2023"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+    code_download: true
+---
+
+# Introduction
+
+Bike share programs have proliferated across the United States over the past decade. By creating micromobility transit options, companies can offer nearly on-demand transit options by operating bicycle docking stations with fleets of bikes. However, these docking stations themselves can be the limiting factor for users starting or ending their journey. If the docking station is empty, would-be riders are unable to start their trip there, but if a user takes the bike share to their destination station and there are no empty docks, they must instead bike to another station farther away from where they intended. As a result, bike shares require careful balancing of supply and demand, and direct intervention of "re-balancing" to ensure bikes and docking availability match user needs.
+
+We believe that effective management of bike and dock availability can benefit from two rebalancing strategies that focus on the flow of bikes between core and fringe stations. We define core stations as the central stations that likely experience a higher number of average trips per hour, while fringe stations are stations at the periphery of the service area that likely see less bike churn compared to the core stations.
+
+- One component of the strategy would include using trucks to transport bikes from core to fringe station during traditional 9-5 peak commuting time periods. This would ensure that people who would like to use the bike share to get to and from work will have a bike available followed by a docking station to return it at their destination. 
+
+- Another component of the strategy is to incentivize riders through discounts or credits during off-peak hours to encourage users to rebalance the system for us. We envision the use of push notifications to some subset of users during low demand periods, with offers such as "take a bike to X station and receive a 50% off discount for your next two rides". This strategy could shift bikes from core to fringe stations or vice versa to limit the need for truck rebalancing, which can help us save money on vehicle and labor costs.
+
+To develop a system for the deployment of our truck fleet and push notifications to users, we need to have an accurate sense of our busiest core and fringe stations, user peak demand, and lulls. Our goal is to accurately predict demand for at least two weeks into the future for effective management of labor and the truck fleet.
+
+```{r setup, include=FALSE}
+rm(list=ls())
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Setup
+
+```{r setup1, message=FALSE}
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(tigris)
+library(tidycensus)
+library(viridis)
+library(riem)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(RSocrata)
+library(conflicted)
+library(gganimate)
+```
+```{r setup2}
+select <- dplyr::select
+filter <- dplyr::filter
+
+plotTheme <- theme(
+  plot.title =element_text(size=12),
+  plot.subtitle = element_text(size=8),
+  plot.caption = element_text(size = 6),
+  axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+  axis.text.y = element_text(size = 10),
+  axis.title.y = element_text(size = 10),
+  # Set the entire chart region to blank
+  panel.background=element_blank(),
+  plot.background=element_blank(),
+  #panel.border=element_rect(colour="#F0F0F0"),
+  # Format the grid
+  panel.grid.major=element_line(colour="#D0D0D0",size=.2),
+  axis.ticks=element_blank())
+
+mapTheme <- theme(plot.title =element_text(size=12),
+                  plot.subtitle = element_text(size=8),
+                  plot.caption = element_text(size = 6),
+                  axis.line=element_blank(),
+                  axis.text.x=element_blank(),
+                  axis.text.y=element_blank(),
+                  axis.ticks=element_blank(),
+                  axis.title.x=element_blank(),
+                  axis.title.y=element_blank(),
+                  panel.background=element_blank(),
+                  panel.border=element_blank(),
+                  panel.grid.major=element_line(colour = 'transparent'),
+                  panel.grid.minor=element_blank(),
+                  legend.direction = "vertical", 
+                  legend.position = "right",
+                  plot.margin = margin(1, 1, 1, 1, 'cm'),
+                  legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
+
+palette5 <- c("#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c")
+palette4 <- c("#D2FBD4","#92BCAB","#527D82","#123F5A")
+palette2 <- c("#6baed6","#08519c")
+
+root.dir = "https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_8/Philly%20Bike%20Share/data/"
+
+# Install Census API Key
+tidycensus::census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f", overwrite = TRUE)
+```
+
+# Data
+
+We will examine a time period that ranges from May 1, 2023 to June 4, 2023 - about five weeks of data. Our analysis will also focus on the beginning stations for trips, and we will not consider trip length or ending destinations.
+
+```{r data, results='hide'}
+dat <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_8/Philly%20Bike%20Share/data/indego-trips-2023-q2.csv")
+
+# Convert 'start_time' to POSIXct date-time format
+dat$start_time <- mdy_hm(dat$start_time)
+
+# Define the start and end dates
+start_date <- as.Date("2023-05-01")
+end_date <- as.Date("2023-06-04")
+
+# Filter the rows between the start and end dates
+dat <- dat %>%
+  filter(start_time >= start_date & start_time <= end_date)
+
+# time bin
+dat2 <- dat %>%
+  mutate(interval60 = floor_date(start_time, unit = "hour"),
+         interval15 = floor_date(start_time, unit = "15 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>% 
+         filter(end_lon != "", end_lat != "",
+         start_lon != "", start_lat != "")
+```
+
+```{r geo, results='hide'}
+#add geographies (adapted from lab code)
+
+phillyCensus <- 
+  get_acs(geography = "tract", 
+          variables = c("B01003_001", "B19013_001", 
+                        "B02001_002", "B08013_001",
+                        "B08012_001", "B08301_001", 
+                        "B08301_010", "B01002_001"), 
+          year = 2021, 
+          state = "PA", 
+          geometry = TRUE, 
+          county=c("Philadelphia"),
+          output = "wide") %>%
+  rename(Total_Pop =  B01003_001E,
+         Med_Inc = B19013_001E,
+         Med_Age = B01002_001E,
+         White_Pop = B02001_002E,
+         Travel_Time = B08013_001E,
+         Num_Commuters = B08012_001E,
+         Means_of_Transport = B08301_001E,
+         Total_Public_Trans = B08301_010E) %>%
+  dplyr::select(Total_Pop, Med_Inc, White_Pop, Travel_Time,
+         Means_of_Transport, Total_Public_Trans,
+         Med_Age,
+         GEOID, geometry) %>%
+  mutate(Percent_White = White_Pop / Total_Pop,
+         Mean_Commute_Time = Travel_Time / Total_Public_Trans,
+         Percent_Taking_Public_Trans = Total_Public_Trans / Means_of_Transport)
+
+phillyTracts <- 
+  phillyCensus %>%
+  as.data.frame() %>%
+  distinct(GEOID, .keep_all = TRUE) %>%
+  dplyr::select(GEOID, geometry) %>% 
+  st_sf
+
+dat_census <- st_join(dat2 %>% 
+          filter(is.na(start_lon) == FALSE &
+                   is.na(start_lat) == FALSE &
+                   is.na(end_lat) == FALSE &
+                   is.na(end_lon) == FALSE) %>%
+          st_as_sf(., coords = c("start_lon", "start_lat"), crs = 4326),
+        phillyTracts %>%
+          st_transform(crs=4326),
+        join=st_intersects,
+              left = TRUE) %>%
+  rename(Origin.Tract = GEOID) %>%
+  mutate(from_longitude = unlist(map(geometry, 1)),
+         from_latitude = unlist(map(geometry, 2)))%>%
+  as.data.frame() %>%
+  dplyr::select(-geometry)%>%
+  st_as_sf(., coords = c("end_lon", "end_lat"), crs = 4326) %>%
+  st_join(., phillyTracts %>%
+            st_transform(crs=4326),
+          join=st_intersects,
+          left = TRUE) %>%
+  rename(Destination.Tract = GEOID)  %>%
+  mutate(end_lon = unlist(map(geometry, 1)),
+         end_lat = unlist(map(geometry, 2)))%>%
+  as.data.frame() %>%
+  dplyr::select(-geometry)
+```
+
+## Importing Weather Data
+
+```{r import_weather, message = FALSE, warning = FALSE }
+weather.Panel <- 
+  riem_measures(station = "PHL", date_start = "2023-05-01", date_end = "2023-06-04") %>%
+  dplyr::select(valid, tmpf, p01i, sknt)%>%
+  replace(is.na(.), 0) %>%
+    mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+    mutate(week = week(interval60),
+           dotw = wday(interval60, label=TRUE)) %>%
+    group_by(interval60) %>%
+    summarize(Temperature = max(tmpf),
+              Precipitation = sum(p01i),
+              Wind_Speed = max(sknt)) %>%
+    mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
+```
+
+We import weather data due to its potential effects on ridership. For example, on rainy, very windy, or especially cold or hot days, riders may be less willing to use the bike share. However, extreme temperatures are likely less of a concern during our study period of May to early June. 
+
+# Exploring the Data
+
+```{r trip_timeseries }
+ggplot(dat_census %>%
+         group_by(interval60) %>%
+         tally())+
+  geom_line(aes(x = interval60, y = n))+
+  labs(title="Bike share trips per hr. Philadelphia, May-June, 2023",
+       x="Date", 
+       y="Number of trips")+
+  plotTheme
+```
+
+This plot appears to show relatively consistent patterns of daily commuting. Days during the week have a bimodal distribution, with the morning commute appearing as a smaller peak and the evening commute appearing as a larger peak. These patterns appear to reiterate the importance of the 9-5 commuters in our system and the need to make sure we balance the system to meet their ride demand. Ridership on weekends appears to have a single peak. Memorial Day also appears at the end of May with lower demand, while May 20th and a few days at in the first half of the month appear to have lower than expected demand during weekdays.
+
+```{r weather}
+
+grid.arrange(
+  ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
+  labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme,
+  ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
+    labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme,
+  ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
+    labs(title="Temperature", x="Hour", y="Temperature") + plotTheme,
+  top="Weather Data - Philadelphia PHL - May-June, 2023")
+
+```
+
+We see in our plots of weather data that the unexplained demand for trips described in the previous plot appears to align with days of precipitation - May 20th especially saw the most rain in our study period, which likely explains the low demand.
+
+```{r mean_trips_hist, warning = FALSE, message = FALSE }
+dat_census %>%
+        mutate(time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+         group_by(interval60, start_station, time_of_day) %>%
+         tally()%>%
+  group_by(start_station, time_of_day)%>%
+  summarize(mean_trips = mean(n))%>%
+  ggplot()+
+  geom_histogram(aes(mean_trips), binwidth = 1)+
+  labs(title="Mean Number of Hourly Trips Per Station. Philadelphia - May-June, 2023",
+       x="Number of trips", 
+       y="Frequency")+
+  facet_wrap(~time_of_day)+
+  plotTheme
+```
+
+We examine the average trips per station by period of the day, which reinforces that the evening commute time has the most demand and some of the busiest station usage.
+
+```{r trips_station_dotw }
+ggplot(dat_census %>%
+         group_by(interval60, start_station) %>%
+         tally())+
+  geom_histogram(aes(n), binwidth = 1)+
+  labs(title="Bike share trips per hr by station. Philadelphia - May-June, 2023",
+       x="Trip Counts", 
+       y="Number of Stations")+
+  plotTheme
+```
+
+We examine the number of trips per station by hour - most hours in the study period experienced one trip begin per hour, but some stations had as many as 10 trips begin in an hour.
+
+```{r trips_hour_dotw }
+
+dat_census <- dat_census %>%
+  mutate(start_time = as.POSIXct(start_time, format = "%m/%d/%Y %H:%M"))
+
+ggplot(dat_census %>% mutate(hour = hour(start_time)))+
+     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
+  labs(title="Bike share trips in Philadelphia, by day of the week, May-June, 2023",
+       x="Hour", 
+       y="Trip Counts")+
+     plotTheme
+
+```
+
+Looking at trips by day of the week, the average trends and peaks of bike share demand begin to take shape.The weekdays and weekends are not homogeneous, but follow similar patterns of two peaks at rush hour on weekdays and and one peak with a wider spread in the middle of the day on weekends.
+
+```{r trip_hours_week}
+ggplot(dat_census %>% 
+         mutate(hour = hour(start_time),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
+     geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
+  labs(title="Bike share trips in Philadelphia - weekend vs weekday, May-June, 2023",
+       x="Hour", 
+       y="Trip Counts")+
+     plotTheme
+```
+
+We also consider average peak and lull times across the full data set, split into weekday and weekend trip counts by hour. On average, we see the trend of two peaks during the weekdays and closer to a single peak spread over a longer period on the weekend. Through this plot, we can better consider the ideal times to for our trucks to be deployed to rebalance the system - likely during the peak times of 8am and 5pm on weekdays. We can also build a strategy for when to send push notifications for non-traditional business hour users to encourage them to rebalance the system for us, such as around 10am and after 8pm on weekdays.
+
+```{r origin_map }
+
+ggplot()+
+  geom_sf(data = phillyTracts %>%
+          st_transform(crs=4326))+
+  geom_point(data = dat_census %>% 
+            mutate(hour = hour(start_time),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+                time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+              group_by(start_station, from_latitude, from_longitude, weekend, time_of_day) %>%
+              tally(),
+            aes(x=from_longitude, y = from_latitude, color = n), 
+            fill = "transparent", alpha = 0.4, size = 0.3)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
+  xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
+  facet_grid(weekend ~ time_of_day)+
+  labs(title="Bike share trips per hr by station. Philadelphia, May-June, 2023")+
+  mapTheme
+
+```
+
+Finally, we consider where our core and fringe stations are. The core stations appear to be centrally located in our bike share system and have the highest number of trips per hour per station, especially during the weekday evening rush hour. Core stations will likely have more churn, which can limit the need for direct intervention and active rebalancing of the system. Understanding where our fringe stations are can help us better understand both where to redirect bikes from as well as where to push notifications to users based on location - for example, if a core station needs bikes and a fringe station has low use, we can incentivize users to take trips away from the fringe stations to add available bikes elsewhere.
+
+We prioritize space and time features, especially weekends versus weekdays, over other spatial amenity features due to the fixed aspect of most spatial features. The distance to parks, subway stations, convenience stores, and amenities to the bike share docking stations will not change and will introduce multi-collinearity in our modeling as a result. Instead, the demand at different stations acts as a reflection of their nearby amenities. 
+
+## Space-Time Panel
+
+```{r panel_length_check , message = FALSE, warning = FALSE}
+
+study.panel <- 
+  expand.grid(interval60=unique(dat_census$interval60), 
+              start_station = unique(dat_census$start_station)) %>%
+  left_join(., dat_census %>%
+              dplyr::select(start_station, start_station, Origin.Tract, from_longitude, from_latitude )%>%
+              distinct() %>%
+              group_by(start_station) %>%
+              slice(1))
+
+ride.panel <- 
+  dat_census %>%
+  mutate(Trip_Counter = 1) %>%
+  right_join(study.panel) %>% 
+  group_by(interval60, start_station, Origin.Tract, from_longitude, from_latitude) %>%
+  summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>%
+  left_join(weather.Panel) %>%
+  ungroup() %>%
+  filter(is.na(start_station) == FALSE) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label = TRUE)) %>%
+  filter(is.na(Origin.Tract) == FALSE)
+
+ride.panel <- 
+  left_join(ride.panel, phillyCensus %>%
+              as.data.frame() %>%
+              select(-geometry), by = c("Origin.Tract" = "GEOID"))
+```
+
+## Time Lags
+
+```{r time_lags , message = FALSE}
+ride.panel <- 
+  ride.panel %>% 
+  arrange(start_station, interval60) %>% 
+  mutate(lagHour = dplyr::lag(Trip_Count,1),
+         lag2Hours = dplyr::lag(Trip_Count,2),
+         lag3Hours = dplyr::lag(Trip_Count,3),
+         lag4Hours = dplyr::lag(Trip_Count,4),
+         lag12Hours = dplyr::lag(Trip_Count,12),
+         lag1day = dplyr::lag(Trip_Count,24),
+         holiday = ifelse(yday(interval60) == 148,1,0)) %>%
+   mutate(day = yday(interval60)) %>%
+   mutate(hour = hour(interval60)) %>%
+   mutate(holidayLag = case_when(dplyr::lag(holiday, 1) == 1 ~ "PlusOneDay",
+                                 dplyr::lag(holiday, 2) == 1 ~ "PlustTwoDays",
+                                 dplyr::lag(holiday, 3) == 1 ~ "PlustThreeDays",
+                                 dplyr::lead(holiday, 1) == 1 ~ "MinusOneDay",
+                                 dplyr::lead(holiday, 2) == 1 ~ "MinusTwoDays",
+                                 dplyr::lead(holiday, 3) == 1 ~ "MinusThreeDays"),
+         holidayLag = ifelse(is.na(holidayLag) == TRUE, 0, holidayLag))
+
+
+
+```
+
+```{r evaluate_lags , warning = FALSE, message = FALSE}
+as.data.frame(ride.panel) %>%
+    group_by(interval60) %>% 
+    summarise_at(vars(starts_with("lag"), "Trip_Count"), mean, na.rm = TRUE) %>%
+    gather(Variable, Value, -interval60, -Trip_Count) %>%
+    mutate(Variable = factor(Variable, levels=c("lagHour","lag2Hours","lag3Hours","lag4Hours",
+                                                "lag12Hours","lag1day")))%>%
+    group_by(Variable) %>%  
+    summarize(correlation = round(cor(Value, Trip_Count),2))
+```
+
+We can observe the relationships between time periods through lag features. These features show us the relationship between demand for a station at a certain hour as well as the demand at that station one hour before, two hours before, three hours before, and so on. These correlations help us to understand the consistency of demand across time.
+
+## Prediction Models
+
+We build five models for trip count that progressively consider more space and time features that may influence rider demand. We split our data into a three week training period and two week testing period, using the training data to predict on the testing data. Our five models consider the following, with all models including day of the week and temperature:
+
+- model 1: hour
+- model 2: starting station
+- model 3: starting station, hour, precipitation
+- model 4: starting station, hour, precipitation, time lags,  
+- model 4: starting station, hour, precipitation, time lags, holiday and holiday lags  
+
+```{r train_test }
+ride.Train <- filter(ride.panel, week >= 20)
+ride.Test <- filter(ride.panel, week < 20)
+
+ride.Train$dotw <- factor(ride.Train$dotw)
+ride.Train$hour <- as.numeric(ride.Train$hour)
+
+# models
+reg1 <- 
+  lm(Trip_Count ~  hour + dotw + Temperature,  data=ride.Train)
+
+reg2 <- 
+  lm(Trip_Count ~  start_station + dotw + Temperature,  data=ride.Train)
+
+reg3 <- 
+  lm(Trip_Count ~  start_station + hour(interval60) + dotw + Temperature + Precipitation, 
+     data=ride.Train)
+
+reg4 <- 
+  lm(Trip_Count ~  start_station +  hour(interval60) + dotw + Temperature + Precipitation +
+                   lagHour + lag2Hours +lag3Hours + lag12Hours + lag1day, 
+     data=ride.Train)
+
+reg5 <- 
+  lm(Trip_Count ~  start_station + hour(interval60) + dotw + Temperature + Precipitation +
+                   lagHour + lag2Hours +lag3Hours +lag12Hours + lag1day + holidayLag + holiday, 
+     data=ride.Train)
+
+# nest data
+ride.Test.weekNest <- 
+  ride.Test %>%
+  nest(-week) 
+```
+
+```{r predict }
+model_pred <- function(dat, fit){
+   pred <- predict(fit, newdata = dat)}
+
+week_predictions <- 
+  ride.Test.weekNest %>% 
+    mutate(ATime_FE = map(.x = data, fit = reg1, .f = model_pred),
+           BSpace_FE = map(.x = data, fit = reg2, .f = model_pred),
+           CTime_Space_FE = map(.x = data, fit = reg3, .f = model_pred),
+           DTime_Space_FE_timeLags = map(.x = data, fit = reg4, .f = model_pred),
+           ETime_Space_FE_timeLags_holidayLags = map(.x = data, fit = reg5, .f = model_pred)) %>% 
+    gather(Regression, Prediction, -data, -week) %>%
+    mutate(Observed = map(data, pull, Trip_Count),
+           Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
+           MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
+           sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
+
+```
+
+## Examining Error Metrics for Accuracy
+
+```{r plot_errors_by_model }
+week_predictions %>%
+  dplyr::select(week, Regression, MAE) %>%
+  gather(Variable, MAE, -Regression, -week) %>%
+  ggplot(aes(week, MAE)) + 
+    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Mean Absolute Errors by model specification and week") +
+  plotTheme
+```
+
+After building our five predictive models, we find that our models D and E perform the best, with lowest amount of average error when predicting trip count for our two week test data. These models end up being identical due to model E including variables for Memorial Day, which is the only holiday present in the data.
+
+```{r error_vs_actual_timeseries , warning = FALSE, message = FALSE}
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station)) %>%
+    dplyr::select(interval60, start_station, Observed, Prediction, Regression) %>%
+    unnest() %>%
+    gather(Variable, Value, -Regression, -interval60, -start_station) %>%
+    group_by(Regression, Variable, interval60) %>%
+    summarize(Value = sum(Value)) %>%
+    ggplot(aes(interval60, Value, colour=Variable)) + 
+      geom_line(size = 1.1) + 
+      facet_wrap(~Regression, ncol=1) +
+      labs(title = "Predicted/Observed bike share time series", subtitle = "Philadelphia; A test set of 2 weeks",  x = "Hour", y= "Station Trips") +
+      plotTheme
+```
+
+We see that models D and E more closely mirror actual observed demand from a station for our two week testing period. However,these models do not quite capture peak demand periods, especially during week days. This may be a challenge for our rebalancing plan for times of peak demand - if we are not accurately predicting the number of bikes needed to meet demand at popular stations, our strategy may not properly rebalance the system. And if we send push notifications at the wrong times for our user rebalancing strategy, we may accidentally take bikes away from where they will be needed at peak demand times.
+
+## Error Evaluation and Crossfold Validation
+
+```{r obs_pred_all, warning=FALSE, message = FALSE, cache=TRUE}
+# week_predictions %>% 
+#     mutate(interval60 = map(data, pull, interval60),
+#            start_station = map(data, pull, start_station), 
+#            from_latitude = map(data, pull, from_latitude), 
+#            from_longitude = map(data, pull, from_longitude),
+#            dotw = map(data, pull, dotw)) %>%
+#     select(interval60, start_station, from_longitude, 
+#            from_latitude, Observed, Prediction, Regression,
+#            dotw) %>%
+#     unnest() %>%
+#   filter(Regression == "ETime_Space_FE_timeLags_holidayLags")%>%
+#   mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+#          time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+#                                  hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+#                                  hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+#                                  hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+#   ggplot()+
+#   geom_point(aes(x= Observed, y = Prediction))+
+#     geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
+#     geom_abline(slope = 1, intercept = 0)+
+#   facet_grid(time_of_day~weekend)+
+#   labs(title="Observed vs Predicted",
+#        x="Observed trips", 
+#        y="Predicted trips")+
+#   plotTheme
+```
+ 
+ 
+```{r errors_by_station, warning = FALSE, message = FALSE }
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station), 
+           from_latitude = map(data, pull, from_latitude), 
+           from_longitude = map(data, pull, from_longitude)) %>%
+    select(interval60, start_station, from_longitude, from_latitude, Observed, Prediction, Regression) %>%
+    unnest() %>%
+  filter(Regression == "ETime_Space_FE_timeLags_holidayLags") %>%
+  group_by(start_station, from_longitude, from_latitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+ggplot(.)+
+  geom_sf(data = phillyCensus, color = "grey", fill = "transparent")+
+  geom_point(aes(x = from_longitude, y = from_latitude, color = MAE), 
+             fill = "transparent", alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
+  xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
+  labs(title="Mean Abs Error, Test Set, Model 5")+
+  mapTheme
+```
+
+We see when plotting average errors by station in our testing data that core stations generally have higher average errors versus fringe stations. This issue could potentially lead to a shortage of bikes in these core stations that we are not accounting for in our rebalancing strategy, thereby leaving potential users without bikes.
+
+```{r station_summary, warning=FALSE, message = FALSE }
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station), 
+           from_latitude = map(data, pull, from_latitude), 
+           from_longitude = map(data, pull, from_longitude),
+           dotw = map(data, pull, dotw) ) %>%
+    select(interval60, start_station, from_longitude, 
+           from_latitude, Observed, Prediction, Regression,
+           dotw) %>%
+    unnest() %>%
+  filter(Regression == "ETime_Space_FE_timeLags_holidayLags")%>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush")) %>%
+  group_by(start_station, weekend, time_of_day, from_longitude, from_latitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+  ggplot(.)+
+  geom_sf(data = phillyCensus, color = "grey", fill = "transparent")+
+  geom_point(aes(x = from_longitude, y = from_latitude, color = MAE), 
+             fill = "transparent", size = 0.5, alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$from_latitude), max(dat_census$from_latitude))+
+  xlim(min(dat_census$from_longitude), max(dat_census$from_longitude))+
+  facet_grid(weekend~time_of_day)+
+  labs(title="Mean Absolute Errors, Test Set")+
+  mapTheme
+  
+```
+
+We consider these same mean average errors across both space and time, which shows us that the afternoon rush hour - our peak demand period - is where our predictive model is the most inaccurate. These maps of absolute error across both stations and space/time lead us to question the accuracy of our predictive model, especially during peak hours of bike share usage.
+
+### K-fold Cross Validation
+
+```{r cv}
+
+library(caret)
+
+control <- trainControl(method="cv", number=20)
+
+# Fit the model
+set.seed(123) # for reproducibility
+model_cv <- train(Trip_Count ~ start_station + hour(interval60) + dotw + Temperature + Precipitation +
+                   lagHour + lag2Hours +lag3Hours +lag12Hours + lag1day + holidayLag + holiday, 
+                  data=ride.panel,
+                  method="lm",
+                  trControl=control,
+                  na.action=na.pass)
+
+# View the results
+print(model_cv)
+
+mae_values=as.data.frame(model_cv$resample$MAE)
+
+mae_values["mae"] <- as.data.frame(model_cv$resample$MAE)
+# names(mae_values) <- "MAE"
+
+mean_mae <- mean(mae_values$mae)
+std_mae <- sd(mae_values$mae)
+
+ggplot(data = mae_values, aes(x = mae)) +
+  geom_histogram(binwidth = 0.001) +
+  geom_vline(xintercept = mean_mae, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean_mae + std_mae, color = "green", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean_mae - std_mae, color = "green", linetype = "dashed", size = 1) + 
+  labs(title = "K-fold CV Mean Absolute Errors (20 folds)",
+       subtitle = "Red line shows the mean MAE, green lines show one standard deviation away from mean")
+
+
+```
+
+Running a cross validation of our full five-week ride share data helps us to understand the generalizability of our model. The red line indicates the average MAE of 20 folds, while the green lines show one standard deviation away from the mean in either direction. The MAE of our predictive model was 0.65 - our model is therefore not an outlier in terms of MAE. It appears that most folds fall within one standard deviation of the mean MAE in our k-fold CV - a tighter spread in the MAE of our k-fold cross validation indicates our model is likely generalizable to new data. Therefore, our model is likely generalizable, but may struggle with accuracy especially for peak demand times.
+
+
+# Conclusions
+
+While we can draw some conclusions about peak travel times and the impacts of weather from our exploratory data analysis that can inform our rebalancing strategy, our predictive model does not appear to accurately capture peak demand for starting stations. Given that most stations for most hours appear to have one trip occur, our MAE of 0.65 is relatively high in comparison. This smoothing effect that our model has for peak demands throughout the day will make it more difficult to predict when to deploy our rebalancing trucks at the time of greatest need. Additionally, we will have a more difficult time in determining  the right times to send push notifications to off-peak users with incentives for them to act as system rebalancers for us. While we could likely use both strategies at night during lowest demand times to reset the system, we have the potential to negatively impact the system with our strategies based on our current predictive model. 
+
+Therefore, this algorithm should not be implemented and the model should be further refined with features that can help better predict peak demand. We should also consider modeling destination demand, since dock availability is another important part of our rebalancing strategy. However, this type of modeling can serve as an important starting point for future iterations.   
+
