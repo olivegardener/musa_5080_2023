@@ -1,7 +1,7 @@
 ---
-title: "Lab and Homework: Space-Time Prediction of Bike Share Demand (MUSA 508, Fall, 2020)"
+title: "Homework 6: Space-Time Prediction of Bike Share Demand"
 author: "Oliver Atwood"
-date: "November 17, 2023"
+date: "November 21, 2023"
 output: 
   html_document:
     toc: true
@@ -11,17 +11,10 @@ output:
 ---
 
 # Introduction
-
-2-3 paragraphs that introduce the reader to bike share and the need for re-balancing. How will re-balancing occur? Perhaps you will manage a small fleet of trucks to move bikes from here to there or perhaps you will offer rewards, discounts or other incentives for riders to move a bike from place to place. Keep in mind, your plan will inform the appropriate time lag features you can use. How far forward do you wish to predict for at any given time?
-
-
-Bikeshare is... here's why supply and demand is challenging and why it matters for bikeshare.
-
-the best way to balance bikes is to ride the rush hour peaks in reverse, bringing bikes from docks at fringe stations to core stations, since core stations have more churn.
-Gamify it through incentivizing riders to bring bikes back to their origin stations at the end of the day. 
-and incentivize users to move bikes from full stations to empty stations during off-peak hours to reduce need of trucks bringing bikes to and fro.
-
-Predicting two weeks into the future would balance the competing needs of accuracy and proactive scheduling of employees.
+Bikeshare systems are an excellent, low-carbon approach to moving people from point A to B in cities. However, they have unique challenges related to fluctuations in supply and demand of bikes over time and across space. At the core of any successful bikeshare program is a balanced inventory, where all docks have bikes to ride and spots to dock available. Anticipating user demand in these systems allows administrators to move bikes ahead of that demand.
+<br>
+<br>
+In order to effectively balance the system, systems administrators should focus on moving bikes on either side of the the rush hour peaks and bringing bikes from docks at fringe stations to core stations. One way to do this would be to 'gamify' balancing for riders through incentivizing riders to bring bikes back to their origin stations at the end of the day and/or incentivizing users to move bikes from full stations to empty stations during off-peak hours to reduce need of trucks bringing bikes to and fro. To manage the remainder of the re-balancing need, bikeshare administrators should direct a small crew running a fleet of trucks to collect bikes and rebalance them according to projected future demand. Predicting demand two weeks into the future would balance the competing needs of accuracy and proactive scheduling of employees.
 
 ```{r setup, include=FALSE}
 rm(list=ls())
@@ -31,7 +24,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Setup
 
-```{r setup_13, cache=TRUE, message=FALSE}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
 library(sf)
 library(lubridate)
@@ -45,6 +38,7 @@ library(kableExtra)
 library(RSocrata)
 library(conflicted)
 library(gganimate)
+library(caret)
 
 select <- dplyr::select
 filter <- dplyr::filter
@@ -92,15 +86,14 @@ root.dir = "https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/
 tidycensus::census_api_key("a3ebdf1648b7fb21df55df7246d9642f040c0ee0", overwrite = TRUE)
 ```
 
-
 # Data
 
-```{r read_dat }
+```{r read_dat, message=FALSE, warning=FALSE, echo=FALSE, results = 'hide'}
 dat <- st_read("https://raw.githubusercontent.com/olivegardener/musa_5080_2023/main/Week_8/Philly%20Bike%20Share/data/indego-trips-2023-q2.csv")
 
 ```
 
-```{r glimpse_dat, echo=FALSE}
+```{r, echo=FALSE}
 # Convert 'start_time' to POSIXct date-time format
 dat$start_time <- mdy_hm(dat$start_time)
 
@@ -115,7 +108,7 @@ dat <- dat %>%
 
 ```
 
-```{r time_bins }
+```{r time_bins}
 dat2 <- dat %>%
   mutate(interval60 = floor_date(start_time, unit = "hour"),
          interval15 = floor_date(start_time, unit = "15 mins"),
@@ -124,12 +117,10 @@ dat2 <- dat %>%
          filter(end_lon != "", end_lat != "",
          start_lon != "", start_lat != "")
 
-
-glimpse(dat2)
 ```
 
 
-## 2.3. Import Census Info
+## Import Census Info
 
 ```{r get_census, message=FALSE, warning=FALSE, cache=TRUE, results = 'hide'}
 phillyCensus <- 
@@ -199,8 +190,9 @@ dat_census <- st_join(dat2 %>%
   as.data.frame() %>%
   dplyr::select(-geometry)
 ```
+# Describe and Explore the Data
 
-## 2.4. Import Weather Data
+## Import Weather Data
 
 ```{r import_weather, message = FALSE, warning = FALSE }
 weather.Panel <- 
@@ -216,7 +208,6 @@ weather.Panel <-
               Wind_Speed = max(sknt)) %>%
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
-glimpse(weather.Panel)
 ```
 
 ```{r plot_weather, catche = TRUE}
@@ -229,23 +220,21 @@ grid.arrange(
     labs(title="Temperature", x="Hour", y="Temperature") + plotTheme,
   top="Weather Data - Philadelphia PHL - May-June, 2023")
 ```
-Here is the weather data, showing how temp and wind speet are somewhat tied together and fluctuate with the day-night swing.
-
-# Describe and Explore the Data
-
-Develop exploratory analysis plots that describe the space/time dependencies in the data and create an animated map. Interpret your findings in the context of the re-balancing plan.
+<br>
+Here is the weather data, showing how temperature and wind speed are somewhat tied together and fluctuate with the day-night swing.
 
 ```{r trip_timeseries }
 ggplot(dat_census %>%
          group_by(interval60) %>%
          tally())+
   geom_line(aes(x = interval60, y = n))+
-  labs(title="Bike share trips per hr. Philadelphia, May-June, 2023, 2018",
+  labs(title="Bike share trips per hr. Philadelphia, May-June, 2023",
        x="Date", 
        y="Number of trips")+
   plotTheme
 ```
-This plot shows a relatively consistent daily oscillation, with two peaks on each day of the work week - one in the morning and a larger one in the evening rush hour.
+<br>
+This plot shows a relatively consistent daily fluctuation, with two peaks on each day of the work week - one in the morning and a larger one in the evening rush hour.
 
 Also visible here is the relatively lower ridership on weekends. Particularly notable on May 13 and 20.
 ```{r mean_trips_hist, warning = FALSE, message = FALSE }
@@ -260,35 +249,39 @@ dat_census %>%
   summarize(mean_trips = mean(n))%>%
   ggplot()+
   geom_histogram(aes(mean_trips), binwidth = 1)+
-  labs(title="Mean Number of Hourly Trips Per Station. Philadelphia, May, 2018",
+  labs(title="Mean Number of Hourly Trips Per Station. Philadelphia, May, 2023",
        x="Number of trips", 
        y="Frequency")+
   facet_wrap(~time_of_day)+
   plotTheme
 ```
+<br>
+Mid-day and PM rush have more normal distributions, whereas AM rush and Overnight are skewed towards mostly one or two trips.
 
 ```{r trips_station_dotw }
 ggplot(dat_census %>%
          group_by(interval60, start_station) %>%
          tally())+
-  geom_histogram(aes(n), binwidth = 5)+
-  labs(title="Bike share trips per hr by station. Philadelphia, May, 2018",
+  geom_histogram(aes(n), binwidth = 1)+
+  labs(title="Bike share trips per hr by station. Philadelphia, May, 2023",
        x="Trip Counts", 
        y="Number of Stations")+
   plotTheme
 ```
+<br>
+Overall, the most frequent count is a single trip.
 
 ```{r trips_hour_dotw }
 
 dat_census <- dat_census %>%
   mutate(start_time = as.POSIXct(start_time, format = "%m/%d/%Y %H:%M"))
 
-ggplot(dat_census %>% mutate(hour = hour(start_time)))+
-     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
-  labs(title="Bike share trips in Philadelphia, by day of the week, May, 2018",
-       x="Hour", 
-       y="Trip Counts")+
-     plotTheme
+# ggplot(dat_census %>% mutate(hour = hour(start_time)))+
+#      geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
+#   labs(title="Bike share trips in Philadelphia, by day of the week, May, 2018",
+#        x="Hour", 
+#        y="Trip Counts")+
+#      plotTheme
 
 
 ggplot(dat_census %>% 
@@ -300,7 +293,8 @@ ggplot(dat_census %>%
        y="Trip Counts")+
      plotTheme
 ```
-one peak on weekends versus two on weekdays. lower ridership on average on weekends. more need for balancing on weekdays. sunday evening is the most important time to rebalance
+<br>
+From this graph we can see one peak per day on weekends versus two on weekdays. On average, ridership is lower on weekends. One key takeaway from this graph is the greater need for balancing the supply of bikes on weekdays than on weekends.
 
 ```{r origin_map }
 
@@ -327,14 +321,15 @@ ggplot()+
   mapTheme
 
 ```
+<br>
 This multi-plot shows the need to balance stations by bringing bikes from stations at the fringe of the network to stations closer to the core, due to the fact that core stations will have more churn.
 
-This focus on trips by stations reflects features not otherwise captured in the model, such as amenities near each station. Given that amenities are fixed in both time and space, they are captured by station locations themselves rather than needing to be modeled explicitly. Inclusion of fixed amenities would result in mutli-colinearity, since the amenities do not vary across time.
+This focus on trips by stations reflects features not otherwise captured in the model, such as amenities near each station. Given that amenities are fixed in both time and space, inclusion of these amenities would result in mutli-colinearity. Therefore, our models capture the effect of these features using station locations themselves as a proxy rather than including the amenities in the model explicitly.
 
 ## Create Space-Time Panel
 
 ```{r panel_length_check , message = FALSE, warning = FALSE}
-length(unique(dat_census$interval60)) * length(unique(dat_census$start_station))
+# length(unique(dat_census$interval60)) * length(unique(dat_census$start_station))
 
 
 study.panel <- 
@@ -346,7 +341,7 @@ study.panel <-
               group_by(start_station) %>%
               slice(1))
 
-nrow(study.panel)      
+# nrow(study.panel)      
 ```
 
 ```{r create_panel , message = FALSE}
@@ -398,7 +393,7 @@ ride.panel <-
 
 ```
 
-```{r evaluate_lags , warning = FALSE, message = FALSE}
+```{r evaluate_lags , warning = FALSE, message = FALSE, results='hide'}
 as.data.frame(ride.panel) %>%
     group_by(interval60) %>% 
     summarise_at(vars(starts_with("lag"), "Trip_Count"), mean, na.rm = TRUE) %>%
@@ -409,8 +404,7 @@ as.data.frame(ride.panel) %>%
     summarize(correlation = round(cor(Value, Trip_Count),2))
 ```
 
-
-## 4.1. Run Models
+# Build Models
 
 ```{r train_test }
 ride.Train <- filter(ride.panel, week >= 20)
@@ -443,7 +437,7 @@ reg5 <-
      data=ride.Train)
 ```
 
-## 4.2. Predict for test data
+## Predict for test data
 
 ```{r nest_data , warning = FALSE, message = FALSE}
 ride.Test.weekNest <- 
@@ -471,11 +465,10 @@ week_predictions <-
            MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
 
-week_predictions
 ```
 
-
-## 5.1. Examine Error Metrics for Accuracy
+# Test Models
+## Examine Error Metrics for Accuracy
 
 ```{r plot_errors_by_model }
 week_predictions %>%
@@ -487,6 +480,8 @@ week_predictions %>%
     labs(title = "Mean Absolute Errors by model specification and week") +
   plotTheme
 ```
+<br>
+This plot shows how model accuracy improves (MAE decreases) with each feature added to the model. Interesting to note here is that the model does not appear to improve when we add temporal proximity to holidays. This may be due to the fact that there aren't many major holidays in the window of time that we used to train the model.
 
 ```{r error_vs_actual_timeseries , warning = FALSE, message = FALSE}
 week_predictions %>% 
@@ -503,36 +498,11 @@ week_predictions %>%
       labs(title = "Predicted/Observed bike share time series", subtitle = "Philadelphia; A test set of 2 weeks",  x = "Hour", y= "Station Trips") +
       plotTheme
 ```
+<br>
+This plot shows how each successive feature we added to our model improved how tightly our predictions track with the observed condition.
 
-## 5.2. Space-Time Error Evaluation
+## Space-Time Error Evaluation
 
-```{r obs_pred_all, warning=FALSE, message = FALSE, cache=TRUE}
-week_predictions %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           start_station = map(data, pull, start_station), 
-           from_latitude = map(data, pull, from_latitude), 
-           from_longitude = map(data, pull, from_longitude),
-           dotw = map(data, pull, dotw)) %>%
-    select(interval60, start_station, from_longitude, 
-           from_latitude, Observed, Prediction, Regression,
-           dotw) %>%
-    unnest() %>%
-  filter(Regression == "ETime_Space_FE_timeLags_holidayLags")%>%
-  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
-                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
-                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
-  ggplot()+
-  geom_point(aes(x= Observed, y = Prediction))+
-    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
-    geom_abline(slope = 1, intercept = 0)+
-  facet_grid(time_of_day~weekend)+
-  labs(title="Observed vs Predicted",
-       x="Observed trips", 
-       y="Predicted trips")+
-  plotTheme
-```
 ```{r errors_by_station, warning = FALSE, message = FALSE }
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
@@ -555,10 +525,10 @@ ggplot(.)+
   labs(title="Mean Abs Error, Test Set, Model 5")+
   mapTheme
 ```
-This plot shows higher errors at the core of the network than the fringe.
+<br>
+This plot shows higher errors at the core of the network than the fringe. This is occurring in an area of higher density and activity, and is likely the product of these factors.
 
-If our MAE is 0.65, this means...
-```{r station_summary, warning=FALSE, message = FALSE }
+```{r station_summary, warning=FALSE, message = FALSE}
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
            start_station = map(data, pull, start_station), 
@@ -590,14 +560,10 @@ week_predictions %>%
   mapTheme
   
 ```
-
-### Use purrr to train and validate several models for comparison on the latter two week test set. Perform either random k-fold cross validation or LOGO-CV on the 5 week panel. You may choose to cross validate by time or space. Interpret your findings in the context of accuracy and generalizability.
-
+<br>
+When we break out the errors by time of day on weekday and weekend, we can similar patterns in distribution to the the overall map of MAE. On the weekends, the higher errors tended to occur further outside of center city, likely due to greater ridership along the Schuylkill River Trail.
 
 ```{r cv}
-
-library(caret)
-
 control <- trainControl(method="cv", number=20)
 
 # Fit the model
@@ -612,13 +578,13 @@ model_cv <- train(Trip_Count ~ start_station + hour(interval60) + dotw + Tempera
 # View the results
 print(model_cv)
 
-mae_values["mae"] <- as.data.frame(model_cv$resample$MAE)
-# names(mae_values) <- "MAE"
+mae_values <- as.data.frame(model_cv$resample$MAE)
+names(mae_values) <- "MAE"
+ 
+mean_mae <- mean(mae_values$MAE)
+std_mae <- sd(mae_values$MAE)
 
-mean_mae <- mean(mae_values$mae)
-std_mae <- sd(mae_values$mae)
-
-ggplot(data = mae_values, aes(x = mae)) +
+ggplot(data = mae_values, aes(x = MAE)) +
   geom_histogram(binwidth = 0.001) +
   geom_vline(xintercept = mean_mae, color = "red", linetype = "dashed", size = 1) +
   geom_vline(xintercept = mean_mae + std_mae, color = "green", linetype = "dashed", size = 1) +
@@ -626,15 +592,15 @@ ggplot(data = mae_values, aes(x = mae)) +
 
 
 ```
-Tighter histogram would be more generalizable because it means our model is not producing significantly different results than those of the random samples.
+<br>
+Here is a histogram of mean absolute error, with vertical lines for mean (red) and standard deviation (green). A tighter histogram here would represent greater generalizability of the model. The spread of this histogram indicates decent generalizability, but it could be better.
 
-
-## 6.1. Interpreting our predictions
-
-
+# Conclusion
+## Interpreting our predictions
 
 ### Conclude with how useful your algorithm is for the bike re-balancing plan.
-
-Our model is not good enough because it is not great a capturing peak times. Comparing mae of the trip count to the mean of the trip count shows...
-
-Our data looks at May to June. Given the high number of higher education institutions in Philly, it is important to consider how the dip in the city's population will be reflected in ridership, particularly in areas of the city with higher proportions of students and univeristy buildings.
+<br>
+Our model is not great a capturing peak times, and it isn't particularly generalizable. However, it does capture the spatial and temporal dimensions of bikeshare demand, which are a good starting point for bike balancing, assuming that the model continues to be improved over time. Some ways that the model could be improved are through engineering of temporally-variable amenities in the form of businesses, museums, and restaurants encoded spatially but also with the hours they are open and closed.
+<br>
+<br>
+Our data also looks at only May to June. Given the high number of higher education institutions in Philly, it is important to consider how the dip in the city's population will be reflected in ridership, particularly in areas of the city with higher proportions of student housing and university buildings. Engineering features to reflect this fluctuation would likely improve model accuracy. It is also important to consider how bikeshare demand changes across the seasons. Therefore, before this model is used to inform bike re-balancing beyond May-June, it should be trained on data gathered across an entire year.
