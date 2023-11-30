@@ -1,7 +1,7 @@
 ---
 title: "Targeting Housing Subsidy"
-author: "Dave Drennan"
-date: "2023-11-17"
+author: "Oliver Atwood"
+date: "2023-11-20"
 output:
   html_document:
     toc: true
@@ -33,15 +33,12 @@ options(scipen = 999)
 
 # Introduction
 
-One paragraph on the motivation for the analysis.
+### One paragraph on the motivation for the analysis.
 
-Connecting people in need of public services to those services is an effective way to address a range of urban issues. In the post-Reagan era, government agencies must work within shoestring budgets. It is therefore paramount that these agencies effectively target their outreach to maximize impact and minimize cost.
+Connecting people in need of public services to those services is an effective way to address a range of urban issues. In the post-Reagan era, government agencies must work within shoestring budgets. It is therefore paramount that these agencies effectively target their outreach to maximize impact and minimize cost. 
+<br>
+For the Department of Housing and Community Development to effectively target its outreach, a new approach is needed. Current methods for outreach are inefficient and ad-hoc, whereas a model-based approach can better target users that are more likely to enroll in programs and take housing repair subsidy credits. Through the development of models based on historical data, this analysis finds patterns of which individuals in the city are most likely to complete the full application process and take the credit, such that outreach can be optimized to maximize impact and minimize cost for the Department.
 
-Current methodology is inefficient and ad-hoc, whereas a model-based approach can better target users that are more likely to take the credit.
-
-
-<!-- Dave's  -->
-<!-- Governments are tasked with maintained a wide range of public services in a fiscally responsible manner. When proactive approaches to tax credit programs and connecting residents with the credits are taken, it's our job in the Department of Housing and Community Development to make sure that our approach is both efficient and effective. For this home repair tax credit program, this approach means reaching eligible homeowners and maximizing the financial benefit of the credit without overspending on the administrative costs of outreach and counseling. Historically, our outreach efforts have been ad-hoc. By using a modeling approaching with historical data, we will pursue a strategy of identifying homeowners who are most likely to complete the full application process and take the credit while minimizing the outreach we do to residents who are unlikely to take the credit, thereby wasting taxpayer dollars. -->
 
 # Data
 
@@ -64,7 +61,7 @@ HousingSubsidy <- HousingSubsidy %>%
   dplyr::select(-y_numeric)
 ```
 
-<!-- Our data is based on previous records of outreach and outcomes. We will seek to build a model that effectively targets eligible homeowners by finding characteristics, or variables, that will make them more likely to enter the program and take the credit. -->
+Using previous records of outreach and outcomes, paired with internal (eg. age) and external factors (eg. inflation rate) related to individuals in question, we seek to build a model that effectively targets eligible homeowners by finding which factors make them more likely to enter the program and take the credit.
 
 ## Exploring data
 
@@ -81,10 +78,9 @@ HousingSubsidy %>%
            subtitle = "(Continous Features)") +
       theme(legend.position = "none")
 ```
+<br>
+From these bar plots, it appears that there are notable differences between No (did not enter program) and Yes (did enter program) the following factors: campaign, inflation_rate, pdays, previous, and unemployment_rate. However, me must keep in mind that these are bar plots of the mean for each of these continuous variables, meaning that there may also be distinctions across the range of values for each variable that are not captured here. Let's make some line plots to reveal the continuous density for each of these variables.
 
-From these bar plots, it appears that there are notable differences between No and Yes for campaign, inflation_rate, pdays, previous, and unemployment_rate. However, me must keep in mind that these are bar plots of the mean for each of these continuous variables, meaning that there may also be distinctions across the range of values for each variable that are not captured here. Let's make some line plots to reveal the continuous density for each of these variables.
-
-<!-- We start by plotting the numerical variables in bar plots. We're most interested in variables that show a sizable contrast between no (did not enter program) and yes (did enter program) such as "previous", because those features are more likely to better predict the outcomes of the homeowner taking the credit. A variable with nearly equal values for no and yes is more of a coin flip scenario as to whether someone will join the program or not based on that characteristic. However, these bar plots only capture the mean value per category of the responses from everyone in our sample. We will instead plot all responses ver variable on density graphs below. -->
 
 ```{r exploratory_continuous_density, message = FALSE, warning = FALSE}
 HousingSubsidy %>%
@@ -98,15 +94,11 @@ HousingSubsidy %>%
          subtitle = "(Continous Features)",
          x="Value", y="Density")
 ```
-
-These line plots visualize continuous variables. This reveals which ones have greater difference in values across the range of each variable, showing the degree of distinction between whether a given individual took the credit or did not.
 <br>
-Of these 9 plots, inflation_rate appears to have the strongest distinction between individuals who enrolled in the program and those who did not. This density plot indicates that higher inflation rates are associated with lower enrollment and lower inflation rates are associated with higher enrollment.
-
+These line plots visualize continuous variables. This reveals which ones have greater difference in values across the range of each variable, showing the degree of distinction between whether a given individual took the credit or did not. Of these 9 plots, inflation_rate appears to have the strongest distinction between individuals who enrolled in the program and those who did not. This density plot indicates that higher inflation rates are associated with lower enrollment and lower inflation rates are associated with higher enrollment.
+<br>
 <br>
 Now let's examine the relationships between enrollment in the housing subsidy program and our categorical features.
-
-<!-- These plots help us visualize the range of outcomes for different variables and help us to better understand nuances in the data, as well as pull out subsets that show the contrast between yes or no outcomes that will help us build a more predictive model. For example, the inflation rate shows potential based on the distinction between outcomes under and over 3% inflation. -->
 
 ```{r exploratory_binary, message = FALSE, warning = FALSE, fig.width=10}
 HousingSubsidy %>%
@@ -122,10 +114,8 @@ HousingSubsidy %>%
              subtitle = "Categorical Features") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-
-These plots show differences across categorical variables.
-
-<!-- Beyond the numeric variables in our sample data, we can also explore relationships between categorical variables. For example, we see in the outcomes for the "contact" variable that participants appear to be more likely to join the program if they are contacted by cell phone as opposed to by telephone. With these variables, it is important to also compare across the category in addition to looking at the difference between outcomes.  -->
+<br>
+These plots show differences across categorical variables. For example, the plot of the "contact" variable shows that participants are be more likely to join the program if they are contacted by cell phone as opposed to by telephone. With these variables, it is important to also compare across the category in addition to looking at the difference between outcomes.
 
 # Model
 
@@ -146,13 +136,11 @@ SubsidyModel <- glm(EnterProgram ~ .,
                   family="binomial" (link="logit"))
 
 ```
-The 'kitchen sink' model gives us an AIC of 1579.1. let's try to improve this.
+The model type we will be using for our prediction is called a logistic regression model, which allows us to model binary outcomes (i.e., yes or no). We can determine how well we do at engineering new features by examining the the AIC score that is generated by the regression output - for this metric, lower is better. Our first model takes a 'kitchen sink' approach, using all of the features in our sample data. This model was not particularly effective at predicting people entering the program.
+<br>
+<br>
+To improve model performance, we will engineer some additional features, based on existing variables in our data set and test how these improve model performance.
 
-The model type we will be using for our prediction is called a logistic regression model, which allows us to model binary outcomes (i.e., yes or no).
-
-<!-- We start by running a model that uses all of the features in our sample data. We will refer to this as the "kitchen sink" model. As part of initial testing, we found that this model is not particularly effective at identifying the true positive rate, or number of people who we marketed to that actually entered the program, which means that the model's sensitivity is low.  -->
-
-<!-- We will develop new features based on the existing variables in our data set in order to make a more sensitive model. We can determine how well we do at engineering new features by examining the the AIC score that is generated by the regression output - for this metric, lower is better. -->
 
 ## Feature Engineering
 
@@ -225,22 +213,18 @@ SubsidyModel3 <- glm(EnterProgram ~ .,
 
 ```
 
-
 ### Feature Engineering Interpretation
-
-In SubsidyModel2, the categorical variables with high levels of correlation were converted into binary variables and several variables of low significance were omitted. 
-Given the outsized significance of the month of March, the day of the week of Wednesday, and single versus other marital statuses, I simplified these three categorical variables down to binaries: MarchOrNot, WedOrNot, and SingleOrNot, respectively. I then omitted the original columns they are derived from.
 <br>
-This approach over-pursuing significance may improve accuracy of the model, but is bad practice for generalizability. In SubsidyModel3, I took a different approach and instead categorizing inflation rate and p_days to improve generalizability.
-
-<!-- We start by pulling out some of the variables considered statistically significant in the model and dropping most of the other variables. In this case, March, Wednesdays, and a marital status of "Single" appear to be statistically significant, so we create new variables that target whether an instance of outreach to a resident checks any of these boxes. 
-
-Given that the previously described features that we created, mainly Wednesdays and March, could be a reflection of quirks in the data, we develop several additional features for a third model that may more accurately reflect phenomena in the data. In this case, we keep the marital status variable and add the following:
-
-- Season, to capture more generalizable categories for time of year (winter, spring, summer, fall),
-- Campaign category, to provide a count of the number of times that an individual was contacted during this sample campaign data as once, twice, three times, or four or more times,
-- pdays category for the numnber of days that an individual wa s contacted from a previous program as never, within the previous two weeks, or between two to four weeks, and
-- Inflation split, which classifies inflation as over or under 3%, which is roughly considered high or low inflation based on the U.S. Federal Reserve's long term inflation goals -->
+In engineering these features, we started by pulling out some of the variables considered statistically significant in the model and dropping most of the other variables. In this case, March, Wednesdays, and a marital status of "Single" appear to be statistically significant, so we created binary variables for each of these, 'MarchOrNot', 'WedOrNot', and 'SingleOrNot', respectively. The original columns for each of these factors were then omitted.
+<br>
+<br>
+Given that the previously described features that we created, mainly Wednesdays and March, could be a reflection of quirks in the data, and that this approach of over-pursuing significance may improve accuracy of the model, but is bad practice for generalizability we took a different approach for a third model, this time developing several additional features that may more accurately reflect phenomena in the data. In this case, we keep the marital status variable and add the following:
+<br>
+<br>
+* Season, to capture more generalizable categories for time of year (winter, spring, summer, fall),
+* Campaign category, to provide a count of the number of times that an individual was contacted during this sample campaign data as once, twice, three times, or four or more times,
+* pdays category for the number of days that an individual wa s contacted from a previous program as never, within the previous two weeks, or between two to four weeks, and
+* Inflation split, which classifies inflation as over or under 3%, which is roughly considered high or low inflation based on the U.S. Federal Reserve's long term inflation goals.
 
 ### Regression Summaries
 ```{r}
@@ -251,18 +235,12 @@ summary(SubsidyModel2)
 summary(SubsidyModel3)
 
 ```
-
-Discuss the pitfalls of chasing significance values relative to real-world common-sense type variables.
-
-<!-- We run all three of our models and compare AIC scores to see which model better reflects our data. The AIC score for the kitchen sink model is 1579, for the second model is 1551. and for the third model 1560. While the second model, with the engineering features for March or not and Wednesday or not, technically has the lowest score, we will use the third model for our analysis. The third model has a lower (and therefore better) AIC value compared to the kitchen sink model while using new features that could be considered more generalizable in different contexts.  -->
-
-<!-- It is possible that the significance of March or Wednesdays could be a reflection of quirks in the data gathering process and are difficult to decipher without additional context that is not reflected in the data set. 
-
-Model 3 will be referred to as the engineered regression for the rest of this report.   -->
-
+<br>
+Here, we run all three models to compare AIC scores for each and see which model better reflects our data. The AIC score for the kitchen sink model is 1579, for the second model is 1551. and for the third model 1560. While the second model technically has the lowest score, it is possible that the significance of March or Wednesdays could be a reflection of quirks in the data gathering process and are difficult to decipher without additional context that is not reflected in the data set. Because of this possibility, we decided to move forward with the third model in our analysis, since this model has a lower (and therefore better) AIC value compared to the kitchen sink model while using more generalizable features.
+<br>
 # Cross Validation
 
-Cross validate both models; compare and interpret two faceted plots of ROC, Sensitivity and Specificity.
+### Cross validate both models; compare and interpret two faceted plots of ROC, Sensitivity and Specificity.
 
 
 ```{r cv1}
@@ -290,17 +268,7 @@ dplyr::select(cvFit1$resample, -Resample) %>%
 
 ```
 
-<!-- ```{r cv2} -->
-<!-- ctrl2 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary) -->
 
-<!-- cvFit2 <- train(y ~ ., -->
-<!--                   data=HousingSubsidy2 %>%  -->
-<!--                     dplyr::select(-EnterProgram),  -->
-<!--                 method="glm", family="binomial", -->
-<!--                 metric="ROC", trControl = ctrl2) -->
-
-<!-- cvFit2 -->
-<!-- ``` -->
 
 ```{r cv3}
 ctrl3 <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -327,12 +295,10 @@ dplyr::select(cvFit3$resample, -Resample) %>%
          subtitle = "Across-fold mean reprented as dotted lines")
 
 ```
-The tighter each distribution is to its mean the more generalizable the model. The plots for model 1 are largely the same. However, sensitivity is tighter for model 2 and therefore model 2 can be assumed to be more generalizable.
 
-<!-- We run cross validation tests on the kitchen sink and engineering regression models to examine outcomes for the ROC curve, sensitivity, and specificity across 100 different iterations. The ROC curve is an indicator of goodness of fit for the model and will be explored in the following section. Sensitivity, as defined earlier, is the true positive rate while specificity is the true negative rate. Both sensitivity and specificity measure how often we capture actual phenomena in the data. The closer each cross validation metric is to the mean, the more generalizable the model is. Both the kitchen sink and engineered regression model have similar metrics, with  high sensitivity and relatively low specificity - however, our engineered regression model is slightly more sensitive, and so is better at predicting true positives in the data.  -->
+We ran cross-validation tests on model 1 and model 3 to examine outcomes for the ROC curve, sensitivity, and specificity across 100 different iterations (folds). The ROC curve is an indicator of goodness of fit for the model and will be explored in the following section. Sensitivity, as defined earlier, is the true positive rate while specificity is the true negative rate. Sensitivity and specificity measure how accurately the model captures actual phenomena in the data. The closer each cross validation metric is to the mean, the more generalizable the model is. Both model 1 and model 3 have similar metrics, with  high sensitivity and relatively low specificity - however, our engineered regression model is slightly more sensitive, and so is better at predicting true positives in the data.
 
 # ROC Curve
-
 
 ```{r testProbs}
 testProbs <- data.frame(Outcome = as.factor(SubsidyTest$EnterProgram),
@@ -363,17 +329,13 @@ ggplot(testProbs3, aes(d = as.numeric(Outcome), m = Probs)) +
   labs(title = "ROC Curve - Housing Subsidy Model")
 ```
 
-This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It also shows that the model is not over-fit, since the curve is a reasonable distance from the top left corner of the plot. To test generalizability, let's do some cross-validation.
+The ROC curve is a reflection of our two most important metrics - true positive responses and false positive responses. False positives are people that we marketed to that did not attempt to enter the housing credit program.
 
-<!-- The ROC curve is a reflection of our two most important metrics - true positive responses and false positive responses. False positives are people that we marketed to that did not attempt to enter the housing credit program.  -->
-
-<!-- This curve allows us to understand the different thresholds of correctly versus incorrectly predicting that someone will enter the program. Our goal is for the area under the curve of our line of predicted outcome thresholds to be near 1 but not at 1. A value of 1 means that we're overfitting the model, meaning it is not generalizable to new data. We also want to be above the diagonal line, which represents 0.5 - in other words, a coin flip of correctly predicting the outcome or predicting worse that a coin flip if below that line. -->
+This curve allows us to understand the different thresholds of correctly versus incorrectly predicting that someone will enter the program. Our goal is for the area under the curve of our line of predicted outcome thresholds to be near 1 but not at 1. In our case, model 3 achieved an Area Under the Curve value of 0.8183, representing a good amount of fitness. This ROC curve shows us that the model is better than random prediction, since the curve is above the diagonal line, which represents a coin flip. It also shows that the model is not over-fit, since the curve is a reasonable distance from the top left corner of the plot.
 
 ### Cost Benefit Analysis
 
-NOT SURE WE NEED THE ACTUAL CONFUSION MATRIX TO DISPLAY
-
-# Confusion Matrix
+### Confusion Matrix
 
 ```{r thresholds}
 testProbs3 <- 
@@ -389,16 +351,16 @@ caret::confusionMatrix(testProbs3$predOutcome, testProbs3$Outcome,
 
 # Cost-Benefit Analysis
 
-<!-- To determine outcomes and costs, we develop a series of cost-benefits equations that reflect the four possibilities in our data: -->
-
-<!-- - True negative revenue “Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.”: -\$0 -->
-<!-- - True positive revenue “Predicted correctly homeowner would enter credit program; allocated the marketing resources, and 25% ultimately achieved the credit”: -\$2,850 + \$5,000 = \$2,150 return for 25% of cases that take the credit. -\$2,850 for 75% of cases who did not take the credit. -->
-<!-- - False negative revenue “Predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign”: \$0 -->
-<!-- - False positive revenue “Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.”: -\$2,850 -->
-
-<!-- The best outcomes are true positive and true negative outcomes - these scenarios are where our model was accurate. False negatives are a neutral outcome since they occur outside of our marketing campaign predictions. False positives are the worst outcome - we allocated marketing resources only to be incorrect in our prediction that the homeowner would enter the credit program.   -->
-
-<!-- For the purposes of cost, we define negative value investments as the marketing and administrative costs associated with outreach to individuals. We define positive value investments as the awarding of a credit to an individual, minus the marketing and administrative cost associated with it. By virtue of this program being a subsidy program, it does not directly generate revenue. Therefore, our goal is maximizing positive investments by the HCD while minimizing negative investments. -->
+Finally, we developed a series of cost-benefits equations that reflect the four possibilities in our data, to determine outcomes and costs:
+<br>
+- True negative revenue “Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.”: -\$0
+- True positive revenue “Predicted correctly homeowner would enter credit program; allocated the marketing resources, and 25% ultimately achieved the credit”: -\$2,850 + \$5,000 = \$2,150 return for 25% of cases that take the credit. -\$2,850 for 75% of cases who did not take the credit.
+- False negative revenue “Predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign”: \$0
+- False positive revenue “Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.”: -\$2,850
+<br>
+The best outcomes are true positive and true negative outcomes - these scenarios are where our model was accurate. False negatives are a neutral outcome since they occur outside of our marketing campaign predictions. False positives are the worst outcome - we allocated marketing resources only to be incorrect in our prediction that the homeowner would enter the credit program.
+<br>
+For the purposes of cost, we define negative value investments as the marketing and administrative costs associated with outreach to individuals. We define positive value investments as the awarding of a credit to an individual, minus the marketing and administrative cost associated with it. By virtue of this program being a subsidy program, it does not directly generate revenue. Therefore, our goal is maximizing positive investments by the HCD while minimizing negative investments.
 
 
 ```{r cost_benefit}
@@ -456,9 +418,9 @@ whichThreshold %>%
   guides(colour=guide_legend(title = "Confusion Matrix")) 
 
 ```
-
-<!-- These costs by threshold show that false positives are the largest driver of steep costs to the program and can lead to steep negative investments at lower thresholds. While minimizing these costs is important for us in our role as the municipal government, this metric does not capture the number of credits awarded, only program costs. -->
-
+<br>
+These costs by threshold show that false positives are the largest driver of steep costs to the program and can lead to steep negative investments at lower thresholds. While minimizing these costs is important for us in our role as the municipal government, this metric does not capture the number of credits awarded, only program costs.
+<br>
 
 ### Plots of Revenue and Credits Thresholds
 
@@ -505,10 +467,10 @@ count_threshold <- whichThreshold_revenue %>%
 
 plot_grid(rev_threshold, count_threshold, ncol = 1, align = "v")
 ```
-
+<br>
 These plots align to show the cost and number of credits awarded at each threshold. Costs decrease as less credits are awarded, especially between the 0.0 and 0.15 thresholds, which is a reflection of false positive predictions decreasing. 
 
-We also show what we determine to be the optimal threshold, which we discuss further in the following section. 
+We also show what we determine to be the optimal threshold of 0.23, which we discuss in greater detail below. 
 
 ### Table of Revenue and Credits 50% and Optimal Thresholds
 
@@ -518,16 +480,16 @@ tableThreshold %>% kbl() %>% kable_minimal()
 
 ```
 
-<!-- We have chosen our optimal threshold to be 0.23. While the marginal cost per credit increases - the cost is four times greater for less than three times the credits compared to the 0.50 threshold - we believe that this threshold limits the steepest costs associated with a high number of false positive responses while effectively increasing the number of credits awarded.  -->
+We have chosen our optimal threshold to be 0.23. While the marginal cost per credit increases - the cost is four times greater for less than three times the credits compared to the 0.50 threshold - we believe that this threshold optimizes the balancing of costs and benefits by limiting the steepest costs associated with a high number of false positive responses while effectively increasing the number of credits awarded.
 
 # Conclusion
 
 Conclude whether and why this model should or shouldn’t be put into production. What could make the model better? What would you do to ensure that the marketing materials resulted in a better response rate?
 
-<!-- Our model is effective at limiting the number of false positive predictions, which are the worst outcome for our marketing program. Our department's money is better spent on the credits themselves, positive investments worth \$5,000 for home repairs, versus the marketing and administrative costs of \$2,850 per homeowner.  -->
+Our model excels in reducing false positive predictions, which are the worst outcome for our marketing efforts. Funding is more effective when it is spent on credits, worth \$5,000 for home repairs, rather than the $2,850 marketing and administrative expenses per homeowner.
 
-<!-- Academic research has found that homeowners who enter the program and take the credit see an average increase in value of \$10,000, with nearby homes surrounding the property seeing an average aggregate premium of \$56,000. While these premiums are substantial and show the value of these subsidies we offer, we can't account for them directly in our model because they are benefits outside the model that are dependent on when the homeowner chooses to conduct a transaction.  -->
+Studies reveal that homeowners participating in the program and utilizing the credit typically benefit from a \$10,000 increase in property value. Additionally, neighboring homes collectively gain an average value of $56,000. These significant premiums highlight the value of our subsidies. However, we did not include these benefits in our cost-benefit calculation, as they are external factors dependent on the homeowner's transaction timing.
 
-<!-- Our model could be improved and optimized if we were given a budget for the total amount of money that the HCD can spend on this credit program - the thresholds can then be selected based on costs that adhere to this budget. Additionally, spatial information in our data set would allow us to see if certain areas, either based on geography or demographics if we pull in Census data, are clustered in any meaningful way. If we find that certain areas are less likely to respond join the program but ultimately not take the credit, we can adjust our marketing and administrative processes to better target those populations with our outreach.  -->
+A clearly-defined budget from the HCD for this credit scheme would help us improve our model by allowing for cost-effective threshold setting. Furthermore, incorporating spatial data into the data set used to train the model could reveal geographic or demographic patterns potentially influencing program responses. If we found that certain areas were less likely to respond and join the program but ultimately not take the credit, we could adjust our marketing and administrative processes to better target outreach to those areas.
 
-<!-- Additionally, we should find ways to limit the administrative costs and decrease the percentage of people who do not take the credit after entering the program. Considering we have a number of people who ultimately don't receive the credit due to issues like faulty paperwork, our counseling and information sessions should be made more effective. With how much we are spending per homeowner, more emphasis should be placed on individual reviews or assistance to iron out these issues. -->
+Finally, reducing administrative costs and the rate of participants not finalizing the credit is crucial. Algorithms such as this one can only go so far to improve the efficacy of government programs such as this one. Given the high expense per homeowner and issues like incomplete paperwork, enhancing the effectiveness of our counseling and information sessions is necessary. More focus on personalized reviews or support could resolve these problems. At the end of the day, increasing funding for the Department of Housing and Community Development will enable it to better serve the community.
