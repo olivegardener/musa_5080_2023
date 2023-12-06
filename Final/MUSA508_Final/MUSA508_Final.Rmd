@@ -80,13 +80,117 @@ inspections <- inspections %>%
   st_set_crs(4326) %>%
   st_transform(ileast)
 
-ggplot()+
-  geom_sf(data = inspections)
-
 #inspections <- write.csv(inspections_final)
 ```
 
 ```{r external data}
+
+# 311 data
+rats <- read_csv("Data/Data_311/rodent_baiting_rat_complaints.csv")
+building_violations <- read_csv("Data/Data_311/building_violations.csv")
+plumbing_violations <- read_csv("Data/Data_311/buildings_plumbing_violations.csv")
+business_complaints <- read_csv("Data/Data_311/business_complaints.csv")
+dumping <- read_csv("Data/Data_311/fly_dumping_complaints.csv")
+carts <- read_csv("Data/Data_311/food_vendor_pushcart_complaints.csv")
+low_water_pressure <- read_csv("Data/Data_311/low_water_pressure_complaints.csv")
+permit_construction_violations <- read_csv("Data/Data_311/no_building_permits_construction_violations.csv")
+no_water <- read_csv("Data/Data_311/no_water_complaints.csv")
+nuisance_animals <- read_csv("Data/Data_311/nuisance_animal_complaints.csv")
+sick_leave_violations <- read_csv("Data/Data_311/paid_sick_leave_violations.csv")
+sanitation_violations <- read_csv("Data/Data_311/sanitation_code_violations.csv")
+street_cleaning <- read_csv("Data/Data_311/street_cleaning_request.csv")
+vacant_abandoned_complaints <- read_csv("Data/Data_311/vacant_abandoned_building_complaints.csv")
+vicious_animals <- read_csv("Data/Data_311/vicious_animal_complaints.csv")
+wage_complaints <- read_csv("Data/Data_311/wage_complaints.csv")
+water_basement <- read_csv("Data/Data_311/water_in_basement_complaints.csv")
+water_street <- read_csv("Data/Data_311/water_on_street_complaints.csv")
+water_quality_concern <- read_csv("Data/Data_311/water_quality_concern.csv")
+
+# Other open data
+neighborhoods <- st_read("Data/neighborhoods.shp") %>%
+  st_transform(ileast)
+# liquor <- read_csv("Data/Total_Liquor_Licenses_in_Chicago.csv") %>%
+#   st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+#   st_set_crs(4326) %>%
+#   st_transform(ileast)
+
+
+```
+
+```{r feature engineering}
+
+animal <- rbind(rats, nuisance_animals, vicious_animals) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+
+sanitation <- rbind(dumping, sanitation_violations, street_cleaning) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+building <- rbind(building_violations, plumbing_violations, permit_construction_violations, vacant_abandoned_complaints) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+flooding <- rbind(water_basement, water_street) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+water <- rbind(low_water_pressure, no_water) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+business <- rbind(business_complaints, carts, sick_leave_violations, wage_complaints) %>%
+  dplyr::filter(is.na(LOCATION) != TRUE,
+                STATUS != "Canceled",
+                DUPLICATE == "FALSE") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE")) %>%
+  st_set_crs(4326) %>%
+  mutate(date = mdy_hms(CREATED_DATE)) %>%
+  mutate(year = year(date)) %>%
+  dplyr::select(SR_TYPE, year, geometry) %>%
+  st_transform(ileast)
+
+inspections_features <- inspections %>%
+  st_join(., neighborhoods) %>%
+  dplyr::select(-sec_neigh, -shape_area, -shape_len)%>%
+  rename(neighborhood = "pri_neigh")
+
 
 
 
