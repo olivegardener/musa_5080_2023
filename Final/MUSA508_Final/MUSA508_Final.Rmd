@@ -6,5 +6,178 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+library(caret)
+library(knitr) 
+library(pscl)
+library(plotROC)
+library(pROC)
+library(lubridate)
+library(gridExtra)
+library(cowplot)
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+options(scipen = 999)
+
+census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f")
+
+palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
+palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
+palette2 <- c("#981FAC","#FF006A")
+
+```
+
+# Data
+
+```{r inspections data}
+
+inspections <- read_csv("Data/Food_Inspections_-_7_1_2018_-_Present.csv")
+
+inspections$date <- mdy(inspections$`Inspection Date`)
+inspections$year <- year(inspections$date)
+
+# Consider filtering out different types of inspections or outcomes? e.g. type = license, outcome = out of business
+
+inspections_final <- inspections %>%
+  dplyr::filter(year == 2021 | year == 2022)
+
+
+#inspections_final <- write.csv(inspections_final)
+```
+```{r external data}
+
+
+
+
+```
+
+```{r outcomes}
+
+inspections_final <- inspections_final %>%
+  mutate(pass_numeric = case_when(Results == "Pass" ~ 0,
+                   Results == "Pass w/ Conditions" ~ 0,
+                   Results != "Pass" ~ 1),
+         pass = case_when(Results == "Pass" ~ "Yes",
+                   Results == "Pass w/ Conditions" ~ "Yes",
+                   Results != "Pass" ~ "No"),
+         ) %>%
+  rename(Type = "Inspection Type")
+
+```
+
+## Data Exploration
+
+```{r data vis}
+
+inspections_final %>%
+    dplyr::select(pass, Risk, Type) %>%
+    gather(Variable, value, -pass) %>%
+    count(Variable, value, pass) %>%
+      ggplot(., aes(value, n, fill = pass)) +   
+        geom_bar(position = "dodge", stat="identity") +
+        facet_wrap(~Variable, scales="free") +
+        scale_fill_manual(values = palette2) +
+        labs(x="Pass", y="Value",
+             title = "Feature associations with the likelihood of Pass",
+             subtitle = "Categorical features") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## Feature Engineering
+
+# Model
+
+```{r create_partition}
+modelTrain <- inspections_final %>%
+  dplyr::filter(year == 2021)
+modelTest  <- inspections_final %>%
+  dplyr::filter(year == 2022)
+
+```
+
+```{r run_model}
+
+model <- glm(pass_numeric ~ .,
+                  data=modelTrain %>% 
+                    dplyr::select(pass_numeric, Risk),
+                  family="binomial" (link="logit"))
+
+summary(model)
+
+```
+```{r testProbs}
+
+testProbs <- data.frame(Outcome = as.factor(modelTest$pass_numeric),
+                        Probs = predict(model, modelTest, type= "response"))
+
+ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
+  geom_density() +
+  facet_grid(Outcome ~ .) +
+  scale_fill_manual(values = palette2) +
+  labs(x = "Pass", y = "Density of probabilities",
+       title = "Distribution of predicted probabilities by observed outcome") +
+  theme(strip.text.x = element_text(size = 18),
+        legend.position = "none")
+```
+
+```{r thresholds}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+```
+
+```{r confusion_matrix}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+
+```
+
+```{r auc, message = FALSE, warning = FALSE}
+auc(testProbs$Outcome, testProbs$Probs)
+```
+```{r roc_curve, warning = FALSE, message = FALSE}
+ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Model")
+```
+
+```{r cv}
+ctrl <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+#Not running, "missing values in object"
+
+cvFit <- train(pass ~ .,
+                  data=inspections_final %>% 
+                    dplyr::select(pass, Risk), 
+                method="glm", family="binomial",
+                metric="ROC", trControl = ctrl)
+
+cvFit
+```
+
+```{r goodness_metrics, message = FALSE, warning = FALSE}
+dplyr::select(cvFit$resample, -Resample) %>%
+  gather(metric, value) %>%
+  left_join(gather(cvFit$results[2:4], metric, mean)) %>%
+  ggplot(aes(value)) + 
+    geom_histogram(bins=35, fill = "#FF006A") +
+    facet_wrap(~metric) +
+    geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
+    scale_x_continuous(limits = c(0, 1)) +
+    labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
+         subtitle = "Across-fold mean reprented as dotted lines")
+
 ```
