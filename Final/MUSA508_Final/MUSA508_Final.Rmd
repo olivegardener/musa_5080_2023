@@ -35,25 +35,58 @@ palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
 palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
 palette2 <- c("#981FAC","#FF006A")
 
+
+ileast <- "epsg:3435"
+
 ```
 
 # Data
 
 ```{r inspections data}
 
-inspections <- read_csv("Data/Food_Inspections_-_7_1_2018_-_Present.csv")
+inspections_all <- read_csv("Data/Food_Inspections_-_7_1_2018_-_Present.csv")
 
-inspections$date <- mdy(inspections$`Inspection Date`)
-inspections$year <- year(inspections$date)
+inspections_all$date <- mdy(inspections_all$`Inspection Date`)
+inspections_all$year <- year(inspections_all$date)
 
-# Consider filtering out different types of inspections or outcomes? e.g. type = license, outcome = out of business
+inspections <- inspections_all %>%
+  dplyr::filter(year == 2021 | year == 2022,
+                Results != "No Entry" & Results != "Out of Business" & Results != "Not Ready",
+                is.na(Location) == FALSE,
+                is.na(Risk) == FALSE) %>%
+  rename(insp_type = "Inspection Type") %>%
+  mutate(Type = case_when( insp_type == "Canvass" ~ "Canvass",
+                           insp_type == "Complaint" ~ "Complaint",
+                           insp_type == "License" ~ "License",
+                           insp_type == "Canvass Re-Inspection" |
+                             insp_type == "Complaint Re-Inspection" |
+                             insp_type == "License Re-Inspection" ~ "Re-Inspections",
+                           insp_type == "NO ENTRY" |
+                             insp_type == "Non-Inspection" |
+                             insp_type == "Recent Inspection" |
+                             insp_type == "Short Form Complaint" |
+                             insp_type == "Special Events (Festivals)" |
+                             insp_type == "Suspected Food Poisoning" |
+                             insp_type == "Suspected Food Poisoning Re-inspection" ~ "Other"),
+         fail_numeric = case_when(Results == "Pass" ~ 0,
+                   Results == "Pass w/ Conditions" ~ 0,
+                   Results != "Pass" ~ 1),
+         fail = case_when(Results == "Pass" ~ "No",
+                   Results == "Pass w/ Conditions" ~ "No",
+                   Results != "Pass" ~ "Yes"),
+         )
 
-inspections_final <- inspections %>%
-  dplyr::filter(year == 2021 | year == 2022)
+inspections <- inspections %>%
+  st_as_sf(coords = c("Longitude", "Latitude")) %>%
+  st_set_crs(4326) %>%
+  st_transform(ileast)
 
+ggplot()+
+  geom_sf(data = inspections)
 
-#inspections_final <- write.csv(inspections_final)
+#inspections <- write.csv(inspections_final)
 ```
+
 ```{r external data}
 
 
@@ -61,34 +94,23 @@ inspections_final <- inspections %>%
 
 ```
 
-```{r outcomes}
-
-inspections_final <- inspections_final %>%
-  mutate(pass_numeric = case_when(Results == "Pass" ~ 0,
-                   Results == "Pass w/ Conditions" ~ 0,
-                   Results != "Pass" ~ 1),
-         pass = case_when(Results == "Pass" ~ "Yes",
-                   Results == "Pass w/ Conditions" ~ "Yes",
-                   Results != "Pass" ~ "No"),
-         ) %>%
-  rename(Type = "Inspection Type")
-
-```
-
 ## Data Exploration
 
 ```{r data vis}
 
-inspections_final %>%
-    dplyr::select(pass, Risk, Type) %>%
-    gather(Variable, value, -pass) %>%
-    count(Variable, value, pass) %>%
-      ggplot(., aes(value, n, fill = pass)) +   
+inspections <- inspections %>%
+  st_drop_geometry()
+
+inspections %>%
+    dplyr::select(fail, Risk, Type) %>%
+    gather(Variable, value, -fail) %>%
+    count(Variable, value, fail) %>%
+      ggplot(., aes(value, n, fill = fail)) +   
         geom_bar(position = "dodge", stat="identity") +
         facet_wrap(~Variable, scales="free") +
         scale_fill_manual(values = palette2) +
-        labs(x="Pass", y="Value",
-             title = "Feature associations with the likelihood of Pass",
+        labs(x="Fail", y="Value",
+             title = "Feature associations with the likelihood of Fail",
              subtitle = "Categorical features") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -99,18 +121,25 @@ inspections_final %>%
 # Model
 
 ```{r create_partition}
-modelTrain <- inspections_final %>%
+
+inspections_2021 <- inspections %>%
   dplyr::filter(year == 2021)
-modelTest  <- inspections_final %>%
-  dplyr::filter(year == 2022)
+
+
+set.seed(1234)
+trainIndex <- createDataPartition(inspections_2021$fail, p = .50,
+                                  list = FALSE,
+                                  times = 1)
+modelTrain <- inspections_2021[ trainIndex,]
+modelTest  <- inspections_2021[-trainIndex,]
 
 ```
 
 ```{r run_model}
 
-model <- glm(pass_numeric ~ .,
-                  data=modelTrain %>% 
-                    dplyr::select(pass_numeric, Risk),
+model <- glm(fail_numeric ~ .,
+                  data=inspectionsTrain %>% 
+                    dplyr::select(fail_numeric, Risk, Type),
                   family="binomial" (link="logit"))
 
 summary(model)
@@ -118,14 +147,14 @@ summary(model)
 ```
 ```{r testProbs}
 
-testProbs <- data.frame(Outcome = as.factor(modelTest$pass_numeric),
+testProbs <- data.frame(Outcome = as.factor(modelTest$fail_numeric),
                         Probs = predict(model, modelTest, type= "response"))
 
 ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
   geom_density() +
   facet_grid(Outcome ~ .) +
   scale_fill_manual(values = palette2) +
-  labs(x = "Pass", y = "Density of probabilities",
+  labs(x = "Fail", y = "Density of probabilities",
        title = "Distribution of predicted probabilities by observed outcome") +
   theme(strip.text.x = element_text(size = 18),
         legend.position = "none")
@@ -159,9 +188,9 @@ ctrl <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFuncti
 
 #Not running, "missing values in object"
 
-cvFit <- train(pass ~ .,
-                  data=inspections_final %>% 
-                    dplyr::select(pass, Risk), 
+cvFit <- train(fail ~ .,
+                  data=inspections %>% 
+                    dplyr::select(fail, Risk), 
                 method="glm", family="binomial",
                 metric="ROC", trControl = ctrl)
 
