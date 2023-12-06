@@ -35,7 +35,6 @@ palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
 palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
 palette2 <- c("#981FAC","#FF006A")
 
-
 ileast <- "epsg:3435"
 
 ```
@@ -138,7 +137,7 @@ modelTest  <- inspections_2021[-trainIndex,]
 ```{r run_model}
 
 model <- glm(fail_numeric ~ .,
-                  data=inspectionsTrain %>% 
+                  data=modelTrain %>% 
                     dplyr::select(fail_numeric, Risk, Type),
                   family="binomial" (link="logit"))
 
