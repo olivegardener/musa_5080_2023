@@ -220,11 +220,11 @@ inspections_features <- inspections_features %>%
 
 ```
 
-```{r get census data, message=FALSE, warning=FALSE, cache=TRUE, results = 'hide'}
+```{r get and join census data, message=FALSE, warning=FALSE, cache=TRUE, results = 'hide'}
 chicagoCensus <- 
   get_acs(geography = "tract", 
           variables = c("B19013_001", "B25002_003", "B25001_001"), 
-          year = 2020, 
+          year = 2021, 
           state = "IL", 
           geometry = TRUE, 
           county=c("Cook"),
@@ -233,39 +233,13 @@ chicagoCensus <-
          Total_Vacancy = B25002_003E,
          Total_Units = B25001_001E) %>%
   mutate(Percent_Vacancy = Total_Vacancy / Total_Units) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, GEOID, geometry)
+  dplyr::select(Med_Inc, Percent_Vacancy, geometry) %>% 
+  st_transform(ileast)
+
+inspections <- st_join(inspections, chicagoCensus, join = st_within)
+
 
 ```
-
-
-```{r join census data to inspections points, message = FALSE, warning = FALSE}
-dat_census <- st_join(inspections %>%
-          filter(is.na(from_longitude) == FALSE &
-                   is.na(from_latitude) == FALSE &
-                   is.na(to_latitude) == FALSE &
-                   is.na(to_longitude) == FALSE) %>%
-          st_as_sf(., coords = c("from_longitude", "from_latitude"), crs = 4326),
-        chicagoTracts %>%
-          st_transform(crs=4326),
-        join=st_intersects,
-              left = TRUE) %>%
-  rename(Origin.Tract = GEOID) %>%
-  mutate(from_longitude = unlist(map(geometry, 1)),
-         from_latitude = unlist(map(geometry, 2)))%>%
-  as.data.frame() %>%
-  dplyr::select(-geometry)%>%
-  st_as_sf(., coords = c("to_longitude", "to_latitude"), crs = 4326) %>%
-  st_join(., chicagoTracts %>%
-            st_transform(crs=4326),
-          join=st_intersects,
-          left = TRUE) %>%
-  rename(Destination.Tract = GEOID)  %>%
-  mutate(to_longitude = unlist(map(geometry, 1)),
-         to_latitude = unlist(map(geometry, 2)))%>%
-  as.data.frame() %>%
-  dplyr::select(-geometry)
-```
-
 
 
 ```{r extract raster data to points}
@@ -274,19 +248,24 @@ summer_thermal <- raster('Data/Landsat9_Thermal_Composite_Chicago.tif')
 winter_thermal <- raster('Data/Landsat9_Thermal_Composite2_Chicago.tif')
 pop_raster <- raster('Data/Pop_2020_Chicago.tif')
 
+
+summer_thermal <- projectRaster(from = summer_thermal, crs = "+init=epsg:3435")
+winter_thermal <- projectRaster(from = winter_thermal, crs = "+init=epsg:3435")
+pop_raster <- projectRaster(from = pop_raster, crs = "+init=epsg:3435")
+
 # Summer Thermal
 # Extract raster values
-extracted_values <- extract(summer_thermal, inspections)
+extracted_values <- raster::extract(summer_thermal, inspections)
 # Add the extracted values to the 'inspections' dataset
-inspections[[summer_thermal]] <- extracted_values
+inspections$extracted_values <- extracted_values
 
 # Winter Thermal
-extracted_values <- extract(winter_thermal, inspections)
-inspections[[summer_thermal]] <- extracted_values
+extracted_values <- raster::extract(winter_thermal, inspections)
+inspections$extracted_values <- extracted_values
 
 # Population
-extracted_values <- extract(pop_raster, inspections)
-inspections[[summer_thermal]] <- extracted_values
+extracted_values <- raster::extract(pop_raster, inspections)
+inspections$extracted_values <- extracted_values
 
 
 ```
