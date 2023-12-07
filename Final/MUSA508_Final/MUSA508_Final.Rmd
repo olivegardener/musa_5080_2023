@@ -26,6 +26,7 @@ library(gridExtra)
 library(cowplot)
 library(raster)
 library(sp)
+library(FNN)
 
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 
@@ -194,6 +195,28 @@ inspections_features <- inspections %>%
   rename(neighborhood = "pri_neigh")
 
 
+inspections_features <- inspections_features %>%
+    mutate(
+      animals_nn5 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(animal)), 
+                                     k = 5),
+      sanitation_nn5 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(sanitation)), 
+                                     k = 3),
+      buildings_nn5 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(building)), 
+                                     k = 5),
+      flooding_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(flooding)), 
+                                     k = 3),
+      water_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(water)), 
+                                     k = 3),
+      business_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     st_coordinates(st_centroid(business)), 
+                                     k = 3)
+      )
+
 
 ```
 
@@ -270,6 +293,152 @@ inspections[[summer_thermal]] <- extracted_values
 
 
 ## Data Exploration
+
+```{r maps}
+
+a <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(animal)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Animals",
+       subtitle = "Nuisance, Vicious, and Rodent",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+b <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(building)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Buildings",
+       subtitle = "Violations - Construction, Permits, Vacant",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+c <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(business)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Businesses",
+       subtitle = "Violations - Wages, Sick Leave, Complaints",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+d <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(water)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Water",
+       subtitle = "No or Low Pressure",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+e <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(flooding)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Flooding",
+       subtitle = "Street or Basement",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+f <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
+  stat_density2d(data = data.frame(st_coordinates(sanitation)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "lightyellow", high = "red",
+                      name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "311 Calls: Buildings",
+       subtitle = "Violations, Illegal Dumping, Street Cleaning",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+plot_row <- plot_grid(a, b, c, d, e, f, nrow = 2)
+
+title <- ggdraw() + 
+  draw_label(
+    "311 Calls",
+    fontface = 'bold',
+    x = 0,
+    hjust = .5
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+```
 
 ```{r data vis}
 
