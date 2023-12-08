@@ -27,6 +27,8 @@ library(cowplot)
 library(raster)
 library(sp)
 library(FNN)
+library(ggcorrplot)
+
 
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 
@@ -37,6 +39,8 @@ census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f")
 palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
 palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
 palette2 <- c("#981FAC","#FF006A")
+palette3 <- c("#C94337", "#f7f7f7", "#5c9b5c")
+
 
 ileast <- "epsg:3435"
 
@@ -273,7 +277,7 @@ inspections$extracted_values <- extracted_values
 
 ## Data Exploration
 
-```{r maps}
+```{r maps, fig.width = 10}
 
 a <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
   stat_density2d(data = data.frame(st_coordinates(animal)), 
@@ -439,7 +443,24 @@ inspections %>%
 
 ```
 
-## Feature Engineering
+```{r}
+
+# Select variables of interest and convert them to numeric
+vars_of_interest <- select_if(st_drop_geometry(inspections), is.numeric) %>% 
+  na.omit()
+
+ggcorrplot(
+  round(cor(vars_of_interest), 2), 
+  p.mat = cor_pmat(vars_of_interest),
+  colors = palette3,
+  type="lower",
+  insig = "blank",
+  lab = TRUE,  # Ensure labels are shown
+  lab_size = 1.5  # Adjust the size of the labels
+  ) +  
+    labs(title = "Correlation Across Numeric Variables") +
+  theme(axis.text = element_text(size = 4)) 
+```
 
 # Model
 
@@ -468,6 +489,7 @@ model <- glm(fail_numeric ~ .,
 summary(model)
 
 ```
+
 ```{r testProbs}
 
 testProbs <- data.frame(Outcome = as.factor(modelTest$fail_numeric),
@@ -489,7 +511,7 @@ testProbs <-
   mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
 ```
 
-```{r confusion_matrix}
+```{r confusion_matrix, warning=FALSE}
 caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
                        positive = "1")
 
@@ -498,6 +520,7 @@ caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome,
 ```{r auc, message = FALSE, warning = FALSE}
 auc(testProbs$Outcome, testProbs$Probs)
 ```
+
 ```{r roc_curve, warning = FALSE, message = FALSE}
 ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +

@@ -34,7 +34,7 @@ start_time <- Sys.time()
 
 coordinate_system <- 4326
 # Target resolution in m
-resolution <- 300
+resolution <- 100
 # Conversion to degrees
 resolution <- (resolution/30)/3600
 
@@ -80,18 +80,10 @@ chicagoCensus <-
 
 ```
 
-```{r extract_geometries }
-chicagoTracts <- 
-  chicagoCensus %>%
-  as.data.frame() %>%
-  distinct(GEOID, .keep_all = TRUE) %>%
-  dplyr::select(GEOID, geometry) %>% 
-  st_sf
 
-```
 
 ```{r add_census_tracts , message = FALSE, warning = FALSE}
-dat_census <- st_join(dat2 %>% 
+dat_census <- st_join(dat2 %>%
           filter(is.na(from_longitude) == FALSE &
                    is.na(from_latitude) == FALSE &
                    is.na(to_latitude) == FALSE &
