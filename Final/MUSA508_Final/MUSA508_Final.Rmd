@@ -26,6 +26,7 @@ library(gridExtra)
 library(cowplot)
 library(raster)
 library(sp)
+library(ggcorrplot)
 library(FNN)
 
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -36,6 +37,7 @@ census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f")
 
 palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
 palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
+palette3 <- c("darkred", "white", "darkgreen")
 palette2 <- c("#981FAC","#FF006A")
 
 ileast <- "epsg:3435"
@@ -236,7 +238,7 @@ chicagoCensus <-
   dplyr::select(Med_Inc, Percent_Vacancy, geometry) %>% 
   st_transform(ileast)
 
-inspections <- st_join(inspections, chicagoCensus, join = st_within)
+inspections_features <- st_join(inspections_features, chicagoCensus, join = st_within)
 
 
 ```
@@ -255,17 +257,37 @@ pop_raster <- projectRaster(from = pop_raster, crs = "+init=epsg:3435")
 
 # Summer Thermal
 # Extract raster values
-extracted_values <- raster::extract(summer_thermal, inspections)
+extracted_values <- raster::extract(summer_thermal, inspections_features)
 # Add the extracted values to the 'inspections' dataset
-inspections$extracted_values <- extracted_values
+inspections_features$extracted_values <- extracted_values
 
 # Winter Thermal
-extracted_values <- raster::extract(winter_thermal, inspections)
-inspections$extracted_values <- extracted_values
+extracted_values <- raster::extract(winter_thermal, inspections_features)
+inspections_features$extracted_values <- extracted_values
 
 # Population
-extracted_values <- raster::extract(pop_raster, inspections)
-inspections$extracted_values <- extracted_values
+extracted_values <- raster::extract(pop_raster, inspections_features)
+inspections_features$extracted_values <- extracted_values
+
+
+```
+
+```{r corrplot}
+vars_of_interest <- select_if(st_drop_geometry(inspections_features), is.numeric) %>% 
+  na.omit()
+
+ggcorrplot(
+  round(cor(vars_of_interest), 2), 
+  p.mat = cor_pmat(vars_of_interest),
+  colors = palette3,
+  type="lower",
+  insig = "blank",
+  lab = TRUE,  # Ensure labels are shown
+  lab_size = 4  # Adjust the size of the labels
+  ) +  
+    labs(title = "Correlation Across Numeric Variables") +
+  theme(axis.text = element_text(size = 12)) 
+
 
 
 ```
@@ -274,6 +296,27 @@ inspections$extracted_values <- extracted_values
 ## Data Exploration
 
 ```{r maps}
+
+inspections_count <- inspections_features %>%
+  dplyr::filter(year ==2021)%>%
+  group_by(neighborhood) %>%
+  summarize(Total = n())
+
+neighborhoods_count<-st_join(neighborhoods,inspections_count)
+
+insp_map<-ggplot()+
+  geom_sf(data=neighborhoods_count, aes(fill = Total), color = NA, lwd = .8)+
+  labs(title = "Total Inspections",
+       subtitle = "2021",
+       caption = "Source: Chicago Data Portal") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
 
 a <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
   stat_density2d(data = data.frame(st_coordinates(animal)), 
@@ -421,11 +464,11 @@ plot_grid(
 
 ```{r data vis}
 
-inspections <- inspections %>%
+inspections_vis <- inspections_features %>%
   st_drop_geometry()
 
-inspections %>%
-    dplyr::select(fail, Risk, Type) %>%
+inspections_vis %>%
+    dplyr::select(fail, Type) %>%
     gather(Variable, value, -fail) %>%
     count(Variable, value, fail) %>%
       ggplot(., aes(value, n, fill = fail)) +   
@@ -437,6 +480,29 @@ inspections %>%
              subtitle = "Categorical features") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+
+inspections_vis %>%
+  dplyr::select(fail, animals_nn5, sanitation_nn5, buildings_nn5, water_nn3, flooding_nn3, business_nn3, Med_Inc, Percent_Vacancy, extracted_values) %>%
+  gather(Variable, value, -fail) %>%
+    ggplot(aes(fail, value, fill=fail)) + 
+      geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+      labs(x="Click", y="Value", 
+           title = "Feature associations with the likelihood of Fail",
+           subtitle = "(continous outcomes)") +
+      theme(legend.position = "none")
+
+inspections_vis %>%
+    dplyr::select(fail, animals_nn5, sanitation_nn5, buildings_nn5, water_nn3, flooding_nn3, business_nn3, Med_Inc, Percent_Vacancy, extracted_values) %>%
+    gather(Variable, value, -fail) %>%
+    ggplot() + 
+    geom_density(aes(value, color=fail), fill = "transparent") + 
+    facet_wrap(~Variable, scales = "free") +
+    scale_fill_manual(values = palette2) +
+    labs(title = "Feature distributions fail vs. pass",
+         subtitle = "(continous outcomes)")
+
 ```
 
 ## Feature Engineering
@@ -445,8 +511,9 @@ inspections %>%
 
 ```{r create_partition}
 
-inspections_2021 <- inspections %>%
-  dplyr::filter(year == 2021)
+inspections_2021 <- inspections_features %>%
+  dplyr::filter(year == 2021)%>%
+  st_drop_geometry()
 
 
 set.seed(1234)
@@ -462,7 +529,7 @@ modelTest  <- inspections_2021[-trainIndex,]
 
 model <- glm(fail_numeric ~ .,
                   data=modelTrain %>% 
-                    dplyr::select(fail_numeric, Risk, Type),
+                    dplyr::select(fail_numeric, Type, animals_nn5, sanitation_nn5, buildings_nn5, water_nn3, flooding_nn3, business_nn3, Med_Inc, Percent_Vacancy, extracted_values),
                   family="binomial" (link="logit"))
 
 summary(model)
@@ -511,9 +578,13 @@ ctrl <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFuncti
 
 #Not running, "missing values in object"
 
+inspections_2021 <- inspections_2021 %>%
+  na.omit()
+
+
 cvFit <- train(fail ~ .,
-                  data=inspections %>% 
-                    dplyr::select(fail, Risk), 
+                  data=inspections_2021 %>% 
+                    dplyr::select(fail, Type, animals_nn5, sanitation_nn5, buildings_nn5, water_nn3, flooding_nn3, business_nn3, Med_Inc, Percent_Vacancy, extracted_values), 
                 method="glm", family="binomial",
                 metric="ROC", trControl = ctrl)
 
