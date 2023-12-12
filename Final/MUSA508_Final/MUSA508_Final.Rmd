@@ -50,6 +50,7 @@ inspections_all <- read_csv("Data/Food_Inspections_-_7_1_2018_-_Present.csv")
 
 inspections_all$date <- mdy(inspections_all$`Inspection Date`)
 inspections_all$year <- year(inspections_all$date)
+inspections_all$quarter <- quarter(inspections_all$date)
 
 inspections <- inspections_all %>%
   dplyr::filter(year == 2021 | year == 2022,
@@ -223,7 +224,7 @@ inspections_features <- inspections_features %>%
 ```{r get and join census data, message=FALSE, warning=FALSE, cache=TRUE, results = 'hide'}
 chicagoCensus <- 
   get_acs(geography = "tract", 
-          variables = c("B19013_001", "B25002_003", "B25001_001"), 
+          variables = c("B19013_001", "B25002_003", "B25001_001", "B25058_001", "B01003_001", "B17001_001"), 
           year = 2021, 
           state = "IL", 
           geometry = TRUE, 
@@ -231,13 +232,13 @@ chicagoCensus <-
           output = "wide") %>%
   rename(Med_Inc = B19013_001E,
          Total_Vacancy = B25002_003E,
-         Total_Units = B25001_001E) %>%
-  mutate(Percent_Vacancy = Total_Vacancy / Total_Units) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, geometry) %>% 
+         Total_Units = B25001_001E,
+         Med_Rent = B25058_001E) %>%
+  mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100) %>% 
+  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, geometry) %>% 
   st_transform(ileast)
 
-inspections <- st_join(inspections, chicagoCensus, join = st_within)
-
+inspections_features <- st_join(inspections_features, chicagoCensus)
 
 ```
 
@@ -255,17 +256,17 @@ pop_raster <- projectRaster(from = pop_raster, crs = "+init=epsg:3435")
 
 # Summer Thermal
 # Extract raster values
-extracted_values <- raster::extract(summer_thermal, inspections)
+extracted_values <- raster::extract(summer_thermal, inspections_features)
 # Add the extracted values to the 'inspections' dataset
-inspections$extracted_values <- extracted_values
+inspections_features$summer <- extracted_values
 
 # Winter Thermal
-extracted_values <- raster::extract(winter_thermal, inspections)
-inspections$extracted_values <- extracted_values
+extracted_values <- raster::extract(winter_thermal, inspections_features)
+inspections_features$winter <- extracted_values
 
 # Population
-extracted_values <- raster::extract(pop_raster, inspections)
-inspections$extracted_values <- extracted_values
+extracted_values <- raster::extract(pop_raster, inspections_features)
+inspections_features$popdensity <- extracted_values
 
 
 ```
@@ -274,6 +275,29 @@ inspections$extracted_values <- extracted_values
 ## Data Exploration
 
 ```{r maps}
+
+inspections_map_data <- inspections_features %>%
+  group_by(neighborhood) %>%
+  summarize(total = n()) %>%
+  st_drop_geometry()
+
+neighborhoods <- neighborhoods %>%
+  rename(neighborhood = "pri_neigh") %>%
+  left_join(.,inspections_map_data,)
+
+inspections_map <- ggplot() + 
+  geom_sf(data = neighborhoods, aes(fill = total), color = "white", lwd = .8)+
+  labs(title = "Inspections",
+       caption = "Source: Chicago Data Portal") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
 
 a <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", lwd = .8) +
   stat_density2d(data = data.frame(st_coordinates(animal)), 
@@ -382,7 +406,7 @@ f <- ggplot() + geom_sf(data = neighborhoods, fill = "black", color = "white", l
   scale_fill_gradient(low = "lightyellow", high = "red",
                       name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "311 Calls: Buildings",
+  labs(title = "311 Calls: Sanitation",
        subtitle = "Violations, Illegal Dumping, Street Cleaning",
        caption = "Source: Chicago Data Portal") +
   theme(legend.position = "none",
@@ -417,11 +441,21 @@ plot_grid(
 )
 
 
+a
+b
+c
+d
+e
+f
+
+wd <- getwd()
+filename = file.path(wd, "img", "name.png")
+
 ```
 
 ```{r data vis}
 
-inspections <- inspections %>%
+inspections_features <- inspections_features %>%
   st_drop_geometry()
 
 inspections %>%
