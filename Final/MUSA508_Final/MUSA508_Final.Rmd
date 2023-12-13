@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(tidycensus)
 library(sf)
+library(spdep)
 library(kableExtra)
 library(caret)
 library(knitr) 
@@ -58,6 +59,36 @@ inspections_all$date <- mdy(inspections_all$`Inspection Date`)
 inspections_all$year <- year(inspections_all$date)
 inspections_all$quarter <- quarter(inspections_all$date)
 
+inspections_old <- inspections_all %>%
+  dplyr::filter(year < 2021,
+                Results != "No Entry" & Results != "Out of Business" & Results != "Not Ready",
+                is.na(Location) == FALSE,
+                is.na(Risk) == FALSE) %>%
+  rename(insp_type = "Inspection Type") %>%
+  mutate(Type = case_when( insp_type == "Canvass" ~ "Canvass",
+                           insp_type == "Complaint" ~ "Complaint",
+                           insp_type == "License" ~ "License",
+                           insp_type == "Canvass Re-Inspection" |
+                             insp_type == "Complaint Re-Inspection" |
+                             insp_type == "License Re-Inspection" ~ "Re-Inspections",
+                           insp_type == "NO ENTRY" |
+                             insp_type == "Non-Inspection" |
+                             insp_type == "Recent Inspection" |
+                             insp_type == "Short Form Complaint" |
+                             insp_type == "Special Events (Festivals)" |
+                             insp_type == "Suspected Food Poisoning" |
+                             insp_type == "Suspected Food Poisoning Re-inspection" ~ "Other"),
+         fail_numeric = case_when(Results == "Pass" ~ 0,
+                   Results == "Pass w/ Conditions" ~ 0,
+                   Results != "Pass" ~ 1),
+         fail = case_when(Results == "Pass" ~ "No",
+                   Results == "Pass w/ Conditions" ~ "No",
+                   Results != "Pass" ~ "Yes"),
+         ) %>%
+  dplyr::select(`License #`, date, year, quarter, Type, fail_numeric, fail) %>%
+  group_by(`License #`) %>%
+  summarize(prior_fails = sum(fail_numeric))
+
 inspections <- inspections_all %>%
   dplyr::filter(year == 2021 | year == 2022,
                 Results != "No Entry" & Results != "Out of Business" & Results != "Not Ready",
@@ -84,6 +115,11 @@ inspections <- inspections_all %>%
                    Results == "Pass w/ Conditions" ~ "No",
                    Results != "Pass" ~ "Yes"),
          )
+
+inspections <- inspections %>%
+  left_join(inspections_old, ., by='License #') %>%
+  dplyr::filter(is.na(Location) == FALSE,
+                'License #' > 0)
 
 inspections <- inspections %>%
   st_as_sf(coords = c("Longitude", "Latitude")) %>%
@@ -204,26 +240,34 @@ inspections_features <- inspections %>%
 
 inspections_features <- inspections_features %>%
     mutate(
-      animals_nn5 = nn_function(st_coordinates(inspections_features), 
+      animals_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(animal)), 
                                      k = 5),
-      sanitation_nn5 = nn_function(st_coordinates(inspections_features), 
+      sanitation_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(sanitation)), 
-                                     k = 3),
-      buildings_nn5 = nn_function(st_coordinates(inspections_features), 
+                                     k = 35),
+      buildings_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(building)), 
-                                     k = 5),
-      flooding_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     k = 50),
+      flooding_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(flooding)), 
-                                     k = 3),
-      water_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     k = 15),
+      water_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(water)), 
-                                     k = 3),
-      business_nn3 = nn_function(st_coordinates(inspections_features), 
+                                     k = 10),
+      business_nn20 = nn_function(st_coordinates(inspections_features), 
                                      st_coordinates(st_centroid(business)), 
-                                     k = 3)
+                                     k = 30)
       )
 
+
+coords <- st_coordinates(inspections_features) 
+
+neighborList <- knn2nb(knearneigh(coords, 1))
+
+spatialWeights <- nb2listw(neighborList, style="W")
+
+inspections_features$lagfail <- lag.listw(spatialWeights, inspections_features$fail_numeric)
 
 ```
 
@@ -265,15 +309,15 @@ pop_raster <- projectRaster(from = pop_raster, crs = "+init=epsg:3435")
 # Extract raster values
 extracted_values <- raster::extract(summer_thermal, inspections_features)
 # Add the extracted values to the 'inspections' dataset
-inspections_features$extracted_values <- extracted_values
+inspections_features$summer <- extracted_values
 
 # Winter Thermal
 extracted_values <- raster::extract(winter_thermal, inspections_features)
-inspections_features$extracted_values <- extracted_values
+inspections_features$winter <- extracted_values
 
 # Population
 extracted_values <- raster::extract(pop_raster, inspections_features)
-inspections_features$extracted_values <- extracted_values
+inspections_features$popdensity <- extracted_values
 
 
 ```
@@ -544,25 +588,6 @@ inspections_vis %>%
 
 ```
 
-```{r}
-
-# Select variables of interest and convert them to numeric
-vars_of_interest <- select_if(st_drop_geometry(inspections), is.numeric) %>% 
-  na.omit()
-
-ggcorrplot(
-  round(cor(vars_of_interest), 2), 
-  p.mat = cor_pmat(vars_of_interest),
-  colors = palette3,
-  type="lower",
-  insig = "blank",
-  lab = TRUE,  # Ensure labels are shown
-  lab_size = 1.5  # Adjust the size of the labels
-  ) +  
-    labs(title = "Correlation Across Numeric Variables") +
-  theme(axis.text = element_text(size = 4)) 
-```
-
 # Model
 
 ```{r create_partition}
@@ -585,7 +610,7 @@ modelTest  <- inspections_2021[-trainIndex,]
 
 model <- glm(fail_numeric ~ .,
                   data=modelTrain %>% 
-                    dplyr::select(fail_numeric, Type, animals_nn5, sanitation_nn5, buildings_nn5, water_nn3, flooding_nn3, business_nn3, Med_Inc, Percent_Vacancy, extracted_values),
+                    dplyr::select(fail_numeric, Type, summer, winter, popdensity, Med_Rent, Percent_Vacancy, neighborhood, quarter, business_nn20, buildings_nn20, flooding_nn20, water_nn20, animals_nn20, lagfail, prior_fails),
                   family="binomial" (link="logit"))
 
 summary(model)
@@ -610,7 +635,7 @@ ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) +
 ```{r thresholds}
 testProbs <- 
   testProbs %>%
-  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.3 , 1, 0)))
 ```
 
 ```{r confusion_matrix, warning=FALSE}
