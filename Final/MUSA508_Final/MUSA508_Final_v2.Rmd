@@ -51,7 +51,39 @@ ileast <- "epsg:3435"
 
 ```
 
+# Introduction
+
+## Motivation
+
+Here at inspectate, we pride ourselves on data-driven solutions that support municipal food safety and health inspections departments in the United States. Our mission statement is to help consumers eat safely, inspectors prioritize efficiently, and business stay open. 
+
+We start with Chicago and plan to use this as a case study to acquire funding to expand for new cities...
+
+## Use Case
+
+We plan to build an app to support health inspectors and restaurant owners...
+
 # Data
+
+## Sources 
+
+Chicago Open Data
+
+US Census Bureau ACS
+
+Google Earth Engine
+
+## Data Exploration
+
+corr plot
+
+relationship graphs
+
+maps of total inspections and inspection failures for 2022 inspection outcomes
+
+## Spatial Process
+
+neighborhoods, relationship to external spatial features
 
 ```{r inspections data}
 
@@ -388,18 +420,20 @@ inspections_2022 <- inspections_2022 %>%
                 license_num > 0) %>%
   st_as_sf()
 
-inspections_2022 <- inspections_2022 %>%
-    mutate(
-      violent_crime_nn = nn_function(st_coordinates(inspections_2022), 
-                                     st_coordinates(st_centroid(violent2021)), 
-                                     k = 2),
-      rats_nn = nn_function(st_coordinates(inspections_2022), 
-                                     st_coordinates(st_centroid(rats2021)), 
-                                     k = 5),
-      sanitation_nn = nn_function(st_coordinates(inspections_2022), 
-                                     st_coordinates(st_centroid(sanitation2021)), 
-                                     k = 5)
-      )
+inspections_2022$violent_buffer <- inspections_2022 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(violent2021, counter = 1),., sum) %>%
+    pull(counter)
+
+inspections_2022$rats_buffer <- inspections_2022 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(rats2021, counter = 1),., sum) %>%
+    pull(counter)
+
+inspections_2022$sanitation_buffer <- inspections_2022 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(sanitation2021, counter = 1),., sum) %>%
+    pull(counter)
 
 inspections_2022$building_buffer <- inspections_2022 %>% 
     st_buffer(250) %>% 
@@ -430,6 +464,12 @@ inspections_2022 <- inspections_2022 %>%
                                      is.na(flooding_buffer) == FALSE ~ flooding_buffer),
          business_buffer = case_when(is.na(business_buffer) == TRUE ~ 0,
                                      is.na(business_buffer) == FALSE ~ business_buffer),
+         violent_buffer = case_when(is.na(violent_buffer) == TRUE ~ 0,
+                                     is.na(violent_buffer) == FALSE ~ violent_buffer),
+         rats_buffer = case_when(is.na(rats_buffer) == TRUE ~ 0,
+                                     is.na(rats_buffer) == FALSE ~ rats_buffer),
+         sanitation_buffer = case_when(is.na(sanitation_buffer) == TRUE ~ 0,
+                                     is.na(sanitation_buffer) == FALSE ~ sanitation_buffer)
          )
 
 coords <- st_coordinates(inspections_2022) 
@@ -439,7 +479,7 @@ inspections_2022$lagfail <- lag.listw(spatialWeights, inspections_2022$fail_nume
 
 chicagoCensus2021 <- 
   get_acs(geography = "tract", 
-          variables = c("B19013_001", "B25002_003", "B25001_001", "B25058_001", "B01003_001", "B17001_001"), 
+          variables = c("B19013_001", "B25002_003", "B25001_001", "B25058_001", "B01003_001", "B17001_002"), 
           year = 2021, 
           state = "IL", 
           geometry = TRUE, 
@@ -448,12 +488,16 @@ chicagoCensus2021 <-
   rename(Med_Inc = B19013_001E,
          Total_Vacancy = B25002_003E,
          Total_Units = B25001_001E,
-         Med_Rent = B25058_001E) %>%
-  mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, geometry) %>% 
+         Med_Rent = B25058_001E,
+         Poverty = B17001_002E,
+         Total_Pop = B01003_001E) %>%
+  mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100,
+         Percent_Poverty = Poverty / Total_Pop * 100) %>% 
+  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, Total_Pop, geometry) %>% 
   st_transform(ileast)
 
 inspections_2022 <- st_join(inspections_2022, chicagoCensus2021, join = st_within)
+
 
 ```
 
@@ -469,18 +513,20 @@ inspections_2023 <- inspections_2023 %>%
                 license_num > 0) %>%
   st_as_sf
 
-inspections_2023 <- inspections_2023 %>%
-    mutate(
-      violent_crime_nn = nn_function(st_coordinates(inspections_2023), 
-                                     st_coordinates(st_centroid(violent2022)), 
-                                     k = 2),
-      rats_nn = nn_function(st_coordinates(inspections_2023), 
-                                     st_coordinates(st_centroid(rats2022)), 
-                                     k = 5),
-      sanitation_nn = nn_function(st_coordinates(inspections_2023), 
-                                     st_coordinates(st_centroid(sanitation2022)), 
-                                     k = 5)
-      )
+inspections_2023$violent_buffer <- inspections_2023 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(violent2022, counter = 1),., sum) %>%
+    pull(counter)
+
+inspections_2023$rats_buffer <- inspections_2023 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(rats2022, counter = 1),., sum) %>%
+    pull(counter)
+
+inspections_2023$sanitation_buffer <- inspections_2023 %>% 
+    st_buffer(250) %>% 
+    aggregate(mutate(sanitation2022, counter = 1),., sum) %>%
+    pull(counter)
 
 inspections_2023$building_buffer <- inspections_2023 %>% 
     st_buffer(250) %>% 
@@ -511,6 +557,12 @@ inspections_2023 <- inspections_2023 %>%
                                      is.na(flooding_buffer) == FALSE ~ flooding_buffer),
          business_buffer = case_when(is.na(business_buffer) == TRUE ~ 0,
                                      is.na(business_buffer) == FALSE ~ business_buffer),
+         violent_buffer = case_when(is.na(violent_buffer) == TRUE ~ 0,
+                                     is.na(violent_buffer) == FALSE ~ violent_buffer),
+         rats_buffer = case_when(is.na(rats_buffer) == TRUE ~ 0,
+                                     is.na(rats_buffer) == FALSE ~ rats_buffer),
+         sanitation_buffer = case_when(is.na(sanitation_buffer) == TRUE ~ 0,
+                                     is.na(sanitation_buffer) == FALSE ~ sanitation_buffer)
          )
 
 coords <- st_coordinates(inspections_2023) 
@@ -520,7 +572,7 @@ inspections_2023$lagfail <- lag.listw(spatialWeights, inspections_2023$fail_nume
 
 chicagoCensus2022 <- 
   get_acs(geography = "tract", 
-          variables = c("B19013_001", "B25002_003", "B25001_001", "B25058_001", "B01003_001", "B17001_001"), 
+          variables = c("B19013_001", "B25002_003", "B25001_001", "B25058_001", "B01003_001", "B17001_002"), 
           year = 2022, 
           state = "IL", 
           geometry = TRUE, 
@@ -529,9 +581,12 @@ chicagoCensus2022 <-
   rename(Med_Inc = B19013_001E,
          Total_Vacancy = B25002_003E,
          Total_Units = B25001_001E,
-         Med_Rent = B25058_001E) %>%
-  mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, geometry) %>% 
+         Med_Rent = B25058_001E,
+         Poverty = B17001_002E,
+         Total_Pop = B01003_001E) %>%
+  mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100,
+         Percent_Poverty = Poverty / Total_Pop * 100) %>% 
+  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, Total_Pop, geometry) %>% 
   st_transform(ileast)
 
 inspections_2023 <- st_join(inspections_2023, chicagoCensus2022, join = st_within)
@@ -539,16 +594,9 @@ inspections_2023 <- st_join(inspections_2023, chicagoCensus2022, join = st_withi
 ```
 
 
-```{r inspections 22_23}
+```{r corrplot, fig.width=10}
 
-inspections_22_23 <- rbind(inspections_2022, inspections_2023)
-
-```
-
-
-```{r corrplot}
-
-vars_of_interest <- select_if(st_drop_geometry(inspections_22_23), is.numeric) %>% 
+vars_of_interest <- select_if(st_drop_geometry(inspections_2022), is.numeric) %>% 
   na.omit()
 
 ggcorrplot(
@@ -559,7 +607,7 @@ ggcorrplot(
   insig = "blank",
   lab = TRUE,  # Ensure labels are shown
   lab_size = 2  # Adjust the size of the labels
-  ) +  
+    ) +  
     labs(title = "Correlation Across Numeric Variables") +
   theme(axis.text = element_text(size = 6 )) 
 
@@ -624,17 +672,32 @@ ggplot(data=neighborhoods_count2022)+
 
 # Model
 
+## Regression
+2022 dependent, 2021 independent
+
+## Validation
+
+## Predictions
+2023 dependent, 2022 independent
+
+
 ```{r create_partition}
 
 inspections_2022_model <- inspections_2022 %>%
   st_drop_geometry()
 
 inspections_2023_model <- inspections_2023 %>%
+  dplyr::filter(neighborhood != "Burnside") %>%
   st_drop_geometry()
  
 
-modelTrain <- inspections_2022_model
-modelTest  <- inspections_2023_model
+set.seed(440)
+trainIndex <- createDataPartition(inspections_2022_model$fail, p = .50,
+                                  list = FALSE,
+                                  times = 1)
+
+modelTrain <- inspections_2022_model[ trainIndex,]
+modelTest  <- inspections_2022_model[ trainIndex,]
 
 ```
 
@@ -642,7 +705,7 @@ modelTest  <- inspections_2023_model
 
 model1 <- glm(fail_numeric ~ .,
               data=modelTrain %>% 
-                dplyr::select(fail_numeric, facility_type, Med_Rent, popdensity, winter, summer, Percent_Vacancy, neighborhood, quarter, rats_nn, sanitation_nn, violent_crime_nn, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails),
+                dplyr::select(fail_numeric, facility_type, Med_Rent, popdensity, winter, summer, Percent_Vacancy, neighborhood, quarter, rats_buffer, sanitation_buffer, violent_buffer, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails, Percent_Poverty),
                   family="binomial" (link="logit"))
 
 
@@ -654,7 +717,7 @@ summary(model1)
 
 model2 <- glm(fail_numeric ~ .,
                   data=modelTrain %>% 
-                    dplyr::select(fail_numeric, facility_type, neighborhood, quarter, Med_Rent, lagfail, prior_fails, popdensity, winter, summer),
+                    dplyr::select(fail_numeric, facility_type, neighborhood, quarter, prior_fails, winter),
                   family="binomial" (link="logit"))
 
 summary(model2)
@@ -668,7 +731,11 @@ summary(model2)
 testProbs <- data.frame(Outcome = as.factor(modelTest$fail_numeric),
                         Probs = predict(model1, modelTest, type= "response"))
 
-results <- cbind(modelTest, testProbs)
+results_test <- cbind(modelTest, testProbs)
+
+testProbs2 <- data.frame(Probs = predict(model1, inspections_2023_model, type= "response"))
+
+results <- cbind(inspections_2023_model, testProbs2)
 
 ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
   geom_density() +
@@ -706,18 +773,17 @@ ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
 ```
 
 ```{r cv}
-ctrl <- trainControl(method = "cv", number = 20, classProbs=TRUE, summaryFunction=twoClassSummary)
+ctrl <- trainControl(method = "cv", number = 50, classProbs=TRUE, summaryFunction=twoClassSummary)
 
-#Not running, "missing values in object"
 
-inspections_22_23 <- inspections_22_23 %>%
+inspections_2022_model <- inspections_2022_model %>%
   st_drop_geometry() %>%
   na.omit()
 
 
 cvFit <- train(fail ~ .,
-                  data=inspections_22_23 %>% 
-                    dplyr::select(fail, facility_type, Med_Rent, Med_Inc, Percent_Vacancy, neighborhood, quarter, rats_nn, sanitation_nn, violent_crime_nn, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails, popdensity, winter, summer), 
+                  data=inspections_2022_model %>% 
+                    dplyr::select(fail, facility_type, Med_Rent, popdensity, winter, summer, Percent_Vacancy, neighborhood, quarter, rats_buffer, sanitation_buffer, violent_buffer, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails, Percent_Poverty), 
                 method="glm", family="binomial",
                 metric="ROC", trControl = ctrl)
 
@@ -758,6 +824,7 @@ ggplot()+
   geom_bar(data = results_plot, aes(bins))
 ```
 
+# Application
 
 ```{r app map}
 results$clean_coords <- gsub(pattern = '[()]', 
@@ -796,9 +863,10 @@ wrigleyville_points <- results %>%
 
 ggplot()+
   geom_sf(data = bounds, fill = NA, color = "grey90")+
-  geom_sf(data = streets_wrigleyville, color = "grey70", lwd = .5)+
+  geom_sf(data = streets_wrigleyville, color = "grey70", lwd = 1)+
+  geom_sf(data = streets_wrigleyville, color = "white", fill = NA, lwd = .2)+
   geom_sf(data = wrigleyville, fill = "lightblue", color = "slateblue1", lwd=1.5, alpha = .2)+
-  geom_sf(data = wrigleyville_bounds_points, aes(color = Probs))+
+  geom_sf(data = wrigleyville_bounds_points, aes(color = Probs), size = 3, alpha = .75)+
   scale_color_viridis(option = "rocket", direction = -1)+
   labs(title = "Wrigleyville",
        subtitle = "Health Inspection Failure Risk",
@@ -812,7 +880,7 @@ ggplot()+
         axis.text = element_blank(),
         plot.title=element_text(size=16,face="bold", color = "black"),
         plot.subtitle = element_text(size=10,face="italic", color = "black"),
-        plot.caption=element_text(size=6, color = "black"))
+        plot.caption=element_text(size=8, color = "black"))
 
 ```
 
@@ -879,3 +947,12 @@ ggplot(data=neighborhoods_count2023)+
 
 ```
 
+# Conclusion
+
+## Model Refinement 
+
+Incorporate more internal characteristics of restaurants
+
+Use text mining and sentiment analysis on online reviews and violations column data
+
+Meeting the use case
