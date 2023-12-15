@@ -2,7 +2,10 @@
 title: "MUSA508_Final"
 author: "Oliver Atwood, Dave Drennan"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
@@ -33,6 +36,8 @@ library(ggcorrplot)
 library(RSocrata)
 library(viridis)
 library(stringr)
+library(ggtext)
+
 
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 
@@ -40,14 +45,12 @@ options(scipen = 999)
 
 census_api_key("e13d5be5cb48d927009e0dca0af99d21918d514f")
 
-palette5 <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
-palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
-palette3 <- c("darkred", "white", "darkgreen")
-palette2 <- c("#981FAC","#FF006A")
+palette2 <- c("grey70","#D1462F")
 palette3 <- c("#C94337", "#f7f7f7", "#5c9b5c")
 
-
 ileast <- "epsg:3435"
+
+output_dir <- "Data/images/"
 
 ```
 
@@ -55,7 +58,7 @@ ileast <- "epsg:3435"
 
 ## Motivation
 
-Here at inspectate, we pride ourselves on data-driven solutions that support municipal food safety and health inspections departments in the United States. Our mission statement is to help consumers eat safely, inspectors prioritize efficiently, and business stay open. 
+Here at inspectate, we pride ourselves on data-driven solutions that support municipal food safety and health inspections departments in the United States. Our mission statement is to help consumers eat safely, inspectors prioritize efficiently, and businesses stay open. 
 
 We start with Chicago and plan to use this as a case study to acquire funding to expand for new cities...
 
@@ -68,22 +71,6 @@ We plan to build an app to support health inspectors and restaurant owners...
 ## Sources 
 
 Chicago Open Data
-
-US Census Bureau ACS
-
-Google Earth Engine
-
-## Data Exploration
-
-corr plot
-
-relationship graphs
-
-maps of total inspections and inspection failures for 2022 inspection outcomes
-
-## Spatial Process
-
-neighborhoods, relationship to external spatial features
 
 ```{r inspections data}
 
@@ -149,7 +136,6 @@ inspections <- inspections %>%
   rename(neighborhood = "pri_neigh")
 
 ```
-
 
 ```{r prior inspection failures}
 
@@ -408,6 +394,16 @@ violent2022 <- violent %>%
 
 ```
 
+
+
+US Census Bureau ACS
+
+Google Earth Engine
+
+## Feature Engineering and Data Exploration
+
+### Feature Engineering 
+
 ```{r feature engineering 2022}
 
 # 2021 independent, 2022 dependent
@@ -493,7 +489,7 @@ chicagoCensus2021 <-
          Total_Pop = B01003_001E) %>%
   mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100,
          Percent_Poverty = Poverty / Total_Pop * 100) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, Total_Pop, geometry) %>% 
+  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, geometry) %>% 
   st_transform(ileast)
 
 inspections_2022 <- st_join(inspections_2022, chicagoCensus2021, join = st_within)
@@ -586,13 +582,68 @@ chicagoCensus2022 <-
          Total_Pop = B01003_001E) %>%
   mutate(Percent_Vacancy = Total_Vacancy / Total_Units * 100,
          Percent_Poverty = Poverty / Total_Pop * 100) %>% 
-  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, Total_Pop, geometry) %>% 
+  dplyr::select(Med_Inc, Percent_Vacancy, Med_Rent, Percent_Poverty, geometry) %>% 
   st_transform(ileast)
 
 inspections_2023 <- st_join(inspections_2023, chicagoCensus2022, join = st_within)
 
 ```
 
+### 2022 Inspections Maps
+
+```{r map 2022}
+
+inspections_2022_map <- inspections_2022 %>%
+  group_by(neighborhood) %>%
+  summarize(Total = n(),
+            Failed = sum(fail_numeric)) %>%
+  mutate(fail_rate = Failed/Total*100) 
+
+neighborhoods_2022<-st_join(neighborhoods,inspections_2022_map)
+
+ggplot()+
+  geom_sf(data=neighborhoods_2022, aes(fill = Total))+
+  scale_fill_viridis(option = "rocket", direction = -1)+
+  labs(title = "Failed Inspections by Neighborhood",
+       subtitle = "2022 (Count)",
+       fill = "Count",
+       caption = "Source: Chicago Data Portal") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=14,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+ggsave(filename = "images/exploratory/neighborhood_fail_2022.png",
+       width = 6)
+
+
+ggplot()+
+  geom_sf(data=neighborhoods_2022, aes(fill = fail_rate))+
+  scale_fill_viridis(option = "rocket", direction = -1)+
+  labs(title = "Failed Inspections by Neighborhood",
+       subtitle = "2022 (Count)",
+       fill = "Count",
+       caption = "Source: Chicago Data Portal") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=14,face="bold", color = "white"),
+        plot.subtitle = element_text(size=10,face="italic", color = "white"),
+        plot.caption=element_text(size=8, color = "white"), 
+        plot.background = element_rect(fill = 'black'))
+
+ggsave(filename = "images/exploratory/neighborhood_fail_2022_pct.png",
+       width = 6)
+
+
+```
+
+### Plotting Predictor Correlations
 
 ```{r corrplot, fig.width=10}
 
@@ -611,85 +662,196 @@ ggcorrplot(
     labs(title = "Correlation Across Numeric Variables") +
   theme(axis.text = element_text(size = 6 )) 
 
+ggsave(filename = "images/exploratory/corrplot.png",
+       width = 6)
+
+
 
 ```
 
-# Data Exploration
+### Plotting Relationships Between Inspection Results and Predictors
 
-```{r maps}
+#### Categorical Variables - Bar Plots
 
-inspections_count2022 <- inspections_22_23 %>%
-  dplyr::filter(year == 2022) %>%
-  group_by(neighborhood) %>%
-  summarize(Total = n(),
-            Failed = sum(fail_numeric)) %>%
-  mutate(fail_rate = Failed/Total*100)
+##### Facility Type
 
-neighborhoods_count2022<-st_join(neighborhoods,inspections_count2022)
+```{r exploratory_binary1, message = FALSE, warning = FALSE}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+  dplyr::select(fail, facility_type) %>%
+    gather(Variable, value, -fail) %>%
+    count(Variable, value, fail) %>%
+      ggplot(., aes(value, n, fill = fail)) +   
+        geom_bar(position = "dodge", stat="identity") +
+        scale_fill_manual(values = palette2) +
+        labs(title = "Feature Associations with the Likelihood of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Counts of Facility Type") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none")
 
-inspections_count2023 <- inspections_22_23 %>%
-  dplyr::filter(year == 2023) %>%
-  group_by(neighborhood) %>%
-  summarize(Total = n(),
-            Failed = sum(fail_numeric)) %>%
-  mutate(fail_rate = Failed/Total*100)
+ggsave(filename = "images/exploratory/facilitytype.png",
+       width = 6)
+```
 
-neighborhoods_count2023<-st_join(neighborhoods,inspections_count2023)
+##### Neighborhood
 
-ggplot(data=neighborhoods_count2022)+
-  geom_sf(aes(fill = Total), color = NA)+
-  scale_fill_viridis(option = "rocket", direction = -1)+
-  labs(title = "Failed Inspections by Neighborhood",
-       subtitle = "2022 (Count)",
-       fill = "Count",
-       caption = "Source: Chicago Data Portal") +
-  theme(panel.grid = element_blank(),
-        panel.background = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        plot.title=element_text(size=14,face="bold", color = "white"),
-        plot.subtitle = element_text(size=10,face="italic", color = "white"),
-        plot.caption=element_text(size=8, color = "white"), 
-        plot.background = element_rect(fill = 'black'))
+```{r exploratory_binary1, message = FALSE, warning = FALSE}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+  dplyr::select(fail, neighborhood) %>%
+    gather(Variable, value, -fail) %>%
+    count(Variable, value, fail) %>%
+      ggplot(., aes(value, n, fill = fail)) +   
+        geom_bar(position = "dodge", stat="identity") +
+        scale_fill_manual(values = palette2) +
+        labs(title = "Feature Associations with the Likelihood of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Counts of Neighborhood") +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0, size = 4),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none")
 
-ggplot(data=neighborhoods_count2022)+
-  geom_sf(aes(fill = fail_rate), color = NA)+
-  scale_fill_viridis(option = "rocket", direction = -1)+
-  labs(title = "Failed Inspections by Neighborhood",
-       subtitle = "2022 (Percent)",
-       fill = "Percent",
-       caption = "Source: Chicago Data Portal") +
-  theme(panel.grid = element_blank(),
-        panel.background = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        plot.title=element_text(size=14,face="bold", color = "white"),
-        plot.subtitle = element_text(size=10,face="italic", color = "white"),
-        plot.caption=element_text(size=8, color = "white"), 
-        plot.background = element_rect(fill = 'black'))
+ggsave(filename = "images/exploratory/neighborhood.png",
+       width = 6)
 
 ```
+
+
+#### Continuous Variables - Bar Plots
+
+##### Inspections and 311 Data
+
+```{r exploratory_continuous1}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+  dplyr::select(fail, prior_fails, quarter, lagfail, rats_buffer, sanitation_buffer, building_buffer, business_buffer, flooding_buffer, water_buffer) %>%
+  gather(Variable, value, -fail) %>%
+    ggplot(aes(fail, value, fill=fail)) + 
+      geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+        labs(title = "Feature Associations with the Likelihood of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Mean of Inspections and 311 Data Features") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+ggsave(filename = "images/exploratory/insp_311.png",
+       width = 6)
+```
+
+##### ACS, Google Earth Engine, and Chicago Crime Data
+
+```{r exploratory_continuous2}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+  dplyr::select(fail, summer, winter, popdensity, Percent_Vacancy, Med_Rent, Percent_Poverty, violent_buffer) %>%
+  gather(Variable, value, -fail) %>%
+    ggplot(aes(fail, value, fill=fail)) + 
+      geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+        labs(title = "Feature Associations with the Likelihood of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Mean of ACS, Google Earth Engine, Chicago Crime Data Features") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+ggsave(filename = "images/exploratory/acs_google_crime.png",
+       width = 6)
+
+```
+
+
+#### Continuous Variables - Density Plots
+
+##### Inspections and 311 Data
+
+```{r exploratory_continuous_density1, message = FALSE, warning = FALSE}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+    dplyr::select(fail,prior_fails, quarter, lagfail, rats_buffer, sanitation_buffer, building_buffer, business_buffer, flooding_buffer, water_buffer) %>%
+    gather(Variable, value, -fail) %>%
+    ggplot() + 
+    geom_density(aes(value, color=fail), fill = "transparent") + 
+    facet_wrap(~Variable, scales = "free") +
+    scale_color_manual(values = palette2) +
+        labs(title = "Feature Distributions of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Continuous Outcomes of Inspections Data Features") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+ggsave(filename = "images/exploratory/insp_311_density.png",
+       width = 6)
+```
+
+##### ACS, Google Earth Engine, and Chicago Crime Data
+
+```{r exploratory_continuous_density2, message = FALSE, warning = FALSE}
+inspections_2022 %>%
+  st_drop_geometry() %>%
+    dplyr::select(fail,summer, winter, popdensity, Percent_Vacancy, Med_Rent, Percent_Poverty, violent_buffer) %>%
+    gather(Variable, value, -fail) %>%
+    ggplot() + 
+    geom_density(aes(value, color=fail), fill = "transparent") + 
+    facet_wrap(~Variable, scales = "free") +
+    scale_color_manual(values = palette2) +
+        labs(title = "Feature Distributions of <span style='color:#D1462F;'>Failing</span>",
+             subtitle = "Continuous Outcomes of Inspections Data Features") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+ggsave(filename = "images/exploratory/acs_google_crime_density.png",
+       width = 6)
+```
+
+
+
+## Spatial Process
+
+neighborhoods, relationship to external spatial features
 
 # Model
 
 ## Regression
-2022 dependent, 2021 independent
-
-## Validation
-
-## Predictions
-2023 dependent, 2022 independent
-
-
 ```{r create_partition}
 
 inspections_2022_model <- inspections_2022 %>%
   st_drop_geometry()
-
-inspections_2023_model <- inspections_2023 %>%
-  dplyr::filter(neighborhood != "Burnside") %>%
-  st_drop_geometry()
- 
 
 set.seed(440)
 trainIndex <- createDataPartition(inspections_2022_model$fail, p = .50,
@@ -701,6 +863,7 @@ modelTest  <- inspections_2022_model[ trainIndex,]
 
 ```
 
+### Model 1
 ```{r run_model}
 
 model1 <- glm(fail_numeric ~ .,
@@ -711,7 +874,12 @@ model1 <- glm(fail_numeric ~ .,
 
 summary(model1)
 
+aic1 <- data.frame(model1$aic) %>%
+  rename(Model1_AIC = "model1.aic")
+
 ```
+
+### Model 2
 
 ```{r run_model}
 
@@ -720,31 +888,44 @@ model2 <- glm(fail_numeric ~ .,
                     dplyr::select(fail_numeric, facility_type, neighborhood, quarter, prior_fails, winter),
                   family="binomial" (link="logit"))
 
-summary(model2)
+aic2 <- data.frame(model2$aic) %>%
+  rename(Model2_AIC = "model2.aic")
+
+cbind(aic1, aic2) %>% 
+  kbl() %>%
+  kable_minimal() %>% 
+  kable_styling(full_width = FALSE)
 
 ```
 
-```{r testProbs}
+## Density of Probabilities Plot
 
-# modelTest change to 2021 with no pass/fail, only predictors
+```{r testProbs}
 
 testProbs <- data.frame(Outcome = as.factor(modelTest$fail_numeric),
                         Probs = predict(model1, modelTest, type= "response"))
 
 results_test <- cbind(modelTest, testProbs)
 
-testProbs2 <- data.frame(Probs = predict(model1, inspections_2023_model, type= "response"))
-
-results <- cbind(inspections_2023_model, testProbs2)
-
 ggplot(testProbs, aes(x = Probs, fill = as.factor(Outcome))) + 
-  geom_density() +
+  geom_density(color = NA) +
   facet_grid(Outcome ~ .) +
   scale_fill_manual(values = palette2) +
   labs(x = "Fail", y = "Density of probabilities",
-       title = "Distribution of predicted probabilities by observed outcome") +
-  theme(strip.text.x = element_text(size = 18),
-        legend.position = "none")
+       title = "Distribution of predicted probabilities by observed outcome (Pass/<span style='color:#D1462F;'>Fail</span>)") +
+        theme(axis.text.x = element_text(size = 8),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+
+ggsave(filename = "images/model/dens_probs.png",
+       width = 8)  
+
 ```
 
 ```{r thresholds}
@@ -767,10 +948,17 @@ auc(testProbs$Outcome, testProbs$Probs)
 ```{r roc_curve, warning = FALSE, message = FALSE}
 ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
-  style_roc(theme = theme_grey) +
+  style_roc(theme = theme_bw) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
   labs(title = "ROC Curve - Model")
+
+ggsave(filename = "images/model/roc.png",
+       width = 8)  
+
 ```
+
+
+## Cross Validation
 
 ```{r cv}
 ctrl <- trainControl(method = "cv", number = 50, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -800,11 +988,50 @@ dplyr::select(cvFit$resample, -Resample) %>%
     geom_vline(aes(xintercept = mean), colour = "#981FAC", linetype = 3, size = 1.5) +
     scale_x_continuous(limits = c(0, 1)) +
     labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
-         subtitle = "Across-fold mean reprented as dotted lines")
+         subtitle = "Across-fold mean reprented as dotted lines")+
+        theme(axis.text.x = element_text(size = 8),
+              panel.background = element_blank(),
+              panel.border = element_rect(color = "grey", fill = NA),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+
+ggsave(filename = "images/model/cv.png",
+       width = 8)  
 
 ```
 
-```{r results plot}
+## Predictions
+2023 dependent, 2022 independent
+
+```{r predictions}
+
+inspections_2023_model <- inspections_2023 %>%
+  filter(neighborhood != "Burnside") %>%
+  st_drop_geometry()
+
+testProbs2 <- data.frame(Probs = predict(model1, inspections_2023_model, type= "response"))
+
+results <- cbind(inspections_2023_model, testProbs2)
+
+results$clean_coords <- gsub(pattern = '[()]', 
+replacement = '', x = results$Location)
+
+split_coords <- str_split(string = results$clean_coords, 
+pattern = ',', n = 2, simplify = TRUE)
+
+results <- cbind(results, split_coords) %>%
+  rename(lat = "1",
+         lon = "2")
+
+results <- results %>%
+  st_as_sf(coords = c("lon", "lat")) %>%
+  st_set_crs(4326) %>%
+  st_transform(ileast)
 
 results_plot <- results %>%
   mutate(bins = case_when(Probs < .1 ~ "0-10%",
@@ -821,26 +1048,30 @@ results_plot <- results %>%
 
 
 ggplot()+
-  geom_bar(data = results_plot, aes(bins))
+  geom_bar(data = results_plot, aes(bins))+
+        labs(title = "Distribution of Fail Risk Probability",
+             subtitle = "2023 Predictions") +
+        theme(axis.text.x = element_text(size = 8),
+              axis.title = element_blank(),
+              panel.background = element_blank(),
+              plot.title=element_markdown(size=14,face="bold"),
+              plot.subtitle = element_text(size=10,face="italic"),
+              plot.caption=element_text(size=8),
+              legend.position = "none",
+              strip.background =element_rect(fill= NA),
+              strip.text = element_text(colour = "black", size = 10, face = "bold"))
+
+ggsave(filename = "images/predict/bar.png",
+       width = 8)  
+
 ```
+
 
 # Application
 
+## Facility Risk by Points
+
 ```{r app map}
-results$clean_coords <- gsub(pattern = '[()]', 
-replacement = '', x = results$Location)
-
-split_coords <- str_split(string = results$clean_coords, 
-pattern = ',', n = 2, simplify = TRUE)
-
-results <- cbind(results, split_coords) %>%
-  rename(lat = "1",
-         lon = "2")
-
-results <- results %>%
-  st_as_sf(coords = c("lon", "lat")) %>%
-  st_set_crs(4326) %>%
-  st_transform(ileast)
 
 wrigleyville <- neighborhoods %>%
   dplyr::filter(pri_neigh == "Wrigleyville")
@@ -882,14 +1113,19 @@ ggplot()+
         plot.subtitle = element_text(size=10,face="italic", color = "black"),
         plot.caption=element_text(size=8, color = "black"))
 
+ggsave(filename = "images/app/wrigleyville.png",
+       width = 8)  
+
 ```
 
-```{r neighborhoods map}
+## Facility Risk by Neighborhoods
 
+```{r app map2}
 results_neighborhoods <- results %>% 
   group_by(neighborhood) %>%
   summarize(total = n(),
             probability = mean(Probs))
+  
 
 results_neighborhood_map <- st_join(neighborhoods, results_neighborhoods)
   
@@ -909,9 +1145,14 @@ ggplot(data=results_neighborhood_map)+
         plot.caption=element_text(size=8, color = "white"), 
         plot.background = element_rect(fill = 'black'))
 
+ggsave(filename = "images/app/neighborhoods_predict_23.png",
+       width = 8)  
+
 ```
 
-```{r maps}
+### Comparison to 2023 Inspections Failures
+
+```{r maps comp}
 
 ggplot(data=neighborhoods_count2023)+
   geom_sf(aes(fill = Total), color = NA)+
@@ -929,6 +1170,9 @@ ggplot(data=neighborhoods_count2023)+
         plot.caption=element_text(size=8, color = "white"), 
         plot.background = element_rect(fill = 'black'))
 
+ggsave(filename = "images/app/neighborhoods_23.png",
+       width = 8)  
+
 ggplot(data=neighborhoods_count2023)+
   geom_sf(aes(fill = fail_rate), color = NA)+
   scale_fill_viridis(option = "rocket", direction = -1)+
@@ -944,6 +1188,12 @@ ggplot(data=neighborhoods_count2023)+
         plot.subtitle = element_text(size=10,face="italic", color = "white"),
         plot.caption=element_text(size=8, color = "white"), 
         plot.background = element_rect(fill = 'black'))
+
+ggsave(filename = "images/app/neighborhoods_23_pct.png",
+       width = 8)  
+
+
+
 
 ```
 
