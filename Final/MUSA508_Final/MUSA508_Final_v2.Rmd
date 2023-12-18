@@ -1,16 +1,19 @@
 ---
-title: "MUSA508_Final"
+title: "inspectate"
+subtitle: "Supporting Chicago Food Safety Inspections"
 author: "Oliver Atwood, Dave Drennan"
 date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
     toc_float: true
+    toc_depth: 4
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 rm(list=ls())
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRUE)
 ```
 
 ```{r packages}
@@ -37,6 +40,7 @@ library(RSocrata)
 library(viridis)
 library(stringr)
 library(ggtext)
+library(modelsummary)
 
 
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -58,19 +62,77 @@ output_dir <- "Data/images/"
 
 ## Motivation
 
-Here at inspectate, we pride ourselves on data-driven solutions that support municipal food safety and health inspections departments in the United States. Our mission statement is to help consumers eat safely, inspectors prioritize efficiently, and businesses stay open. 
+Here at inspectate, we pride ourselves on data-driven solutions that support municipal food safety and health inspections departments in the United States. Our mission statement is to help consumers eat safely, inspectors prioritize efficiently, and businesses stay open. It is said that cleanliness is next to godliness, so we inspectaters take our mission very seriously in supporting food inspectors with identifying health and safety violations so that citizens can ingest a safer future.
 
-We start with Chicago and plan to use this as a case study to acquire funding to expand for new cities...
+We have created a case study for the City of Chicago, with its millions of residents and vibrant culture and food scene. Every day, residents and tourists eat out at restaurants, grocery stores, bakeries, nursing homes, entertainment venues, and more. Chicago is the perfect city to showcase our model - a logistic regression model to identify failure risk of food establishments. We focus on canvass inspections, the unannounced reviews of establishments by Chicago food inspectors. By including a range of factors that can indicate whether a place will fail a food inspection, we put more power in the hands of the Chicago Health Department to better prioritize neighborhoods with high failure rates and more power in the hands of business owners who can better understand risk factors and adjust accordingly to ensure they pass an inspection and stay open.
 
 ## Use Case
 
-We plan to build an app to support health inspectors and restaurant owners...
+We envision our model supporting two groups of users - Chicago health inspectors and owners of establishments serving food. Once adapted into a phone and web app developed by our software development team, we are confident our users will have a greater understanding of their inspection failure risk levels and act accordingly to ensure success:
+
+- Chicago health inspectors are spread thin - [about three dozen inspectors are responsible for over 15,000 food establishments](https://chicago.github.io/food-inspections-evaluation/). Responsibilities also extend beyond canvass inspections to other types such as license or complaint inspections. However, knowing where the areas of highest risk are through our app can allow inspectors to prioritize businesses with the greatest chance of failing and intercept bad practices before they reach the customers of these establishments.
+
+- Business owners want to stay open and continue making money. By giving these entrepreneurs and hardworking citizens of Chicago the same information as the health inspectors, they can adjust behavior, especially if identified as high risk for failure, to make sure their establishment does not fail a health inspection. 
+
+Ultimately, our app aims to align the information and incentives of both the City and the establishment owners to best protect the customers.
 
 # Data
 
-## Sources 
+We have identified a range of variables from multiple sources to build our model and create two data pipelines - 2022 inspection results with 2021 predictors and 2023 inspection results with 2022 predictors. The former will be referred to as the model data and the latter will be referred to as the prediction data, which will be utilized later in our process.
 
-Chicago Open Data
+Importantly for our ability to implement this process in other cities as we expand our app, all data is publicly available and downloadable. While we chose to use local files for model consistency in our beta development process, future iterations can use APIs for continual updates.
+
+## Sources
+
+Chicago Data Portal
+
+* [Food Inspections - 7/1/2018-Present](https://data.cityofchicago.org/Health-Human-Services/Food-Inspections-7-1-2018-Present/qizy-d2wf/about_data) 
+    + Type of facility
+    + Prior inspections failures associated with license number
+    + Nearby inspections failures
+    + Calendar quarter of inspection (e.g. Q2)
+* [Chicago 311 Data](https://data.cityofchicago.org/Service-Requests/311-Service-Requests/v6vf-nfxy/about_data)
+    + Building complaints
+        - Building violations
+        - Plumbing violations
+        - Permit/construction violations
+        - Vacant or Abandoned buildings complaints
+    + Business-related complaints
+        - Business complaints
+        - Sick leave violation calls
+        - Wage complaints
+    + Flooding complaints
+        - Water in basement calls
+        - Water in street calls
+    + Rodent complaints
+    + Sanitation complaints
+    + Water utility complaints
+        - Low water pressure call
+        - No water calls
+        - Water quality concern calls
+* [Chicago Neighborhoods](https://data.cityofchicago.org/Facilities-Geographic-Boundaries/Boundaries-Neighborhoods/bbvz-uum9)
+* [Violent crimes (homicides and non-fatal shootings)](https://data.cityofchicago.org/Public-Safety/Violence-Reduction-Victims-of-Homicides-and-Non-Fa/gumc-mgzr/about_data)
+
+US Census Bureau 
+
+* [American Community Survey (ACS) - Tract Level](https://data.census.gov/)
+    + Median income
+    + Median rent
+    + Poverty rate
+        - Total population in poverty divided by total population
+    + Vacancy rate
+        - Total vacant units divided by total units
+
+Google Earth Engine
+
+* [Landsat 8 Raster Data](https://developers.google.com/earth-engine/datasets/catalog/landsat-8) - 30m Resolution
+    + Population density
+    + Summer median temperature
+    + Winter median temperature
+
+## Data Processing 
+
+We first add our data and format dates across all years for easier processing.
 
 ```{r inspections data}
 
@@ -81,7 +143,9 @@ inspections_all$year <- year(inspections_all$date)
 inspections_all$quarter <- quarter(inspections_all$date)
 ```
 
-```{r train and test inspections data}
+We then clean and filter the inspections data, filtering for our target years of 2022 and 2022 as well as canvass inspections only. We pull out inspections results that are pass, pass with conditions, and fail, setting the first two as "pass". We also simplify the types of establishments to the top five by count of establishments - restaurants, schools, grocery stores, children's services facilities, long term care facilities, and other - with the latter aggregating the range of options entered into that field. Neighborhood data is joined and associated with each point. 
+
+```{r train and test inspections data, results = "hide"}
 
 # for model 
 inspections <- inspections_all %>%
@@ -136,6 +200,8 @@ inspections <- inspections %>%
   rename(neighborhood = "pri_neigh")
 
 ```
+
+We also use health inspection failures associated with the business license number prior to the target year (back to 7/1/2018) to incorporate historical inspections failures of the business.
 
 ```{r prior inspection failures}
 
@@ -197,6 +263,8 @@ inspections_pre2023 <- inspections_all %>%
 
 ```
 
+Through Google Earth Engine, we incorporate landsat 8 raster data that includes summer thermal readings, winter thermal readings, and population density, all at a 30m resolution. These raster readings are then attributed to the points locations.
+
 ```{r raster data}
 # Read the infrared data file
 summer_thermal <- raster('Data/Landsat9_Thermal_Composite_Chicago.tif')
@@ -223,6 +291,12 @@ extracted_values <- raster::extract(pop_raster, inspections)
 inspections$popdensity <- extracted_values
 
 ```
+
+Processing the 311 data includes several steps:
+
+* Data is read in for each category
+* For aggregate predictors (buildings, business, flooding, and water utility complaints), inputs are bound together
+* Data is filtered for non-cancelled or non-duplicated calls, geolocated to points, and split into data associated with 2021 and 2022 because of our dual data pipeline with one year lags. 
 
 ```{r chicago data}
 
@@ -394,17 +468,15 @@ violent2022 <- violent %>%
 
 ```
 
-
-
-US Census Bureau ACS
-
-Google Earth Engine
-
 ## Feature Engineering and Data Exploration
 
 ### Feature Engineering 
 
-```{r feature engineering 2022}
+To incorporate our 311 predictor variables with our points of inspections data, we use 250 foot buffers around each point and sum the count of the category within that buffer. We also find the three nearest neighboring establishments and include whether those neighbors failed an inspection that year. ACS data is processed and manipulated using the Census API to include economic and demographic predictor features. 
+
+This process is conducted twice, once with 2022 inspections results and 2021 predictors and once with 2023 inspections results and 2022 predictors.
+
+```{r feature engineering 2022, results='hide'}
 
 # 2021 independent, 2022 dependent
 inspections_2022 <- inspections %>%
@@ -497,7 +569,7 @@ inspections_2022 <- st_join(inspections_2022, chicagoCensus2021, join = st_withi
 
 ```
 
-```{r feature engineering 2023}
+```{r feature engineering 2023, results='hide'}
 
 # 2021 independent, 2022 dependent
 inspections_2023 <- inspections %>%
@@ -591,6 +663,8 @@ inspections_2023 <- st_join(inspections_2023, chicagoCensus2022, join = st_withi
 
 ### 2022 Inspections Maps
 
+As we begin to visualize our processed data, we first consider a map that shows a count of inspections by neighborhood using the model data. Neighborhoods in the downtown core of Chicago have the highest counts of inspections, which likely reflects higher counts of food establishments generally.
+
 ```{r map 2022}
 
 inspections_2022_map <- inspections_2022 %>%
@@ -604,7 +678,7 @@ neighborhoods_2022<-st_join(neighborhoods,inspections_2022_map)
 ggplot()+
   geom_sf(data=neighborhoods_2022, aes(fill = Total))+
   scale_fill_viridis(option = "rocket", direction = -1)+
-  labs(title = "Failed Inspections by Neighborhood",
+  labs(title = "Inspections by Neighborhood",
        subtitle = "2022 (Count)",
        fill = "Count",
        caption = "Source: Chicago Data Portal") +
@@ -619,13 +693,17 @@ ggplot()+
 
 ggsave(filename = "images/exploratory/neighborhood_fail_2022.png",
        width = 6)
+```
 
+However, when we visualize the percent of failed inspections by neighborhood for our model data, we see that there are higher percentages of failure in the South Side of Chicago. Our first map shows that this area has lower counts of inspections overall, but this second map shows these neighborhoods having establishments that struggle to pass health inspections. 
+
+```{r map 2022 pct}
 
 ggplot()+
   geom_sf(data=neighborhoods_2022, aes(fill = fail_rate))+
   scale_fill_viridis(option = "rocket", direction = -1)+
   labs(title = "Failed Inspections by Neighborhood",
-       subtitle = "2022 (Count)",
+       subtitle = "2022 (Percent)",
        fill = "Count",
        caption = "Source: Chicago Data Portal") +
   theme(panel.grid = element_blank(),
@@ -645,9 +723,12 @@ ggsave(filename = "images/exploratory/neighborhood_fail_2022_pct.png",
 
 ### Plotting Predictor Correlations
 
+We generate a correlation plot to understand associations between our variables, their relationship with inspections failures (fail_numeric), and multicollinearity in our data (similar predictive power for our model that we want to avoid). This plot shows that we should eliminate one of Median Rent or Median Income since they are collinear, so we will remove Median Income since Percent Poverty is also included in the model. None of our predictors appear to have a significantly strong relationship with our fail_numeric dependent variable.
+
 ```{r corrplot, fig.width=10}
 
 vars_of_interest <- select_if(st_drop_geometry(inspections_2022), is.numeric) %>% 
+  dplyr::select(-license_num, -'Inspection ID', -Zip) %>%
   na.omit()
 
 ggcorrplot(
@@ -671,11 +752,20 @@ ggsave(filename = "images/exploratory/corrplot.png",
 
 ### Plotting Relationships Between Inspection Results and Predictors
 
+To further explore our data, we plot the relationships between passing or failing an inspection and individual predictors. 
+
+For bar plots, variables that show a noticeable distinction between pass and fail will be more meaningful for our model - if the bars are instead level, it means that the predictor may not show a strong difference in outcomes of a health inspection for our points. 
+
+For density plots, continuous variables that show distinctions between density of pass versus density of fail can be separated into categorical variables that better align with pass fail (e.g. split the continuous variable into two categories, one above and one below a certain threshold). If the pass/fail lines instead track closely with one another or don't show meaningful or consistent differences of pass and fail, it means that the predictor may not show a strong difference in outcomes of a health inspection for our points.
+
 #### Categorical Variables - Bar Plots
 
 ##### Facility Type
 
+Our plot of facility types shows that most types of establishments will not fail an inspection, but proportions across the types vary slightly for failures. For example, restaurants and schools show that failures can make up about half of total inspections for that facility type, but grocery stores appear to be closer to one-third. 
+
 ```{r exploratory_binary1, message = FALSE, warning = FALSE}
+
 inspections_2022 %>%
   st_drop_geometry() %>%
   dplyr::select(fail, facility_type) %>%
@@ -700,7 +790,9 @@ ggsave(filename = "images/exploratory/facilitytype.png",
 
 ##### Neighborhood
 
-```{r exploratory_binary1, message = FALSE, warning = FALSE}
+Neighborhood associations also vary significantly for pass and fail outcomes, although a majority of neighborhoods have establishments that pass the inspection. The Loop, Chicago's downtown area, is the peak area for both passing and failing inspections. 
+
+```{r exploratory_binary2, message = FALSE, warning = FALSE}
 inspections_2022 %>%
   st_drop_geometry() %>%
   dplyr::select(fail, neighborhood) %>%
@@ -724,10 +816,11 @@ ggsave(filename = "images/exploratory/neighborhood.png",
 
 ```
 
-
 #### Continuous Variables - Bar Plots
 
 ##### Inspections and 311 Data
+
+Our features related to inspections failures (lagfail and prior_fail) as well as the feature for counts of nearby water utility-related calls (water_buffer) show the greatest distinction between passing and failing an inspection for the inspections and 311 data. 
 
 ```{r exploratory_continuous1}
 inspections_2022 %>%
@@ -755,6 +848,8 @@ ggsave(filename = "images/exploratory/insp_311.png",
 ```
 
 ##### ACS, Google Earth Engine, and Chicago Crime Data
+
+There are not significant distinctions between features from the ACS, Google Earth Engine, or Crime data.
 
 ```{r exploratory_continuous2}
 inspections_2022 %>%
@@ -784,6 +879,8 @@ ggsave(filename = "images/exploratory/acs_google_crime.png",
 
 
 #### Continuous Variables - Density Plots
+
+For all continuous variables, few distinct patterns emerge to separate the continuous data into categorical variables.
 
 ##### Inspections and 311 Data
 
@@ -839,15 +936,16 @@ ggsave(filename = "images/exploratory/acs_google_crime_density.png",
        width = 6)
 ```
 
-
-
 ## Spatial Process
 
-neighborhoods, relationship to external spatial features
+Our external predictor features all rely on spatial relationships with our points of food establishments. Whether by buffer or spatial location, we consider spatial attributes for each feature. Additionally, data internal to the inspections considers spatial relationships through identifying the nearest neighbors that failed inspections. Our primary geographic relationships are points to neighborhoods, points to tracts, and points to raster 30m polygons. 
 
 # Model
 
 ## Regression
+
+We first partition our model data into a training and testing set using a 50/50 split. 
+
 ```{r create_partition}
 
 inspections_2022_model <- inspections_2022 %>%
@@ -863,25 +961,37 @@ modelTest  <- inspections_2022_model[ trainIndex,]
 
 ```
 
-### Model 1
-```{r run_model}
+### Logistic Model
+
+We then run our logistic regression model, and will keep all features besides Median Income, even if some didn't not show strong distinctions in our data exploration. 
+
+Our model output shows facility type, winter thermals, prior fails, and neighborhood to be features with statistical significance at different levels.
+
+```{r run_model1}
 
 model1 <- glm(fail_numeric ~ .,
               data=modelTrain %>% 
-                dplyr::select(fail_numeric, facility_type, Med_Rent, popdensity, winter, summer, Percent_Vacancy, neighborhood, quarter, rats_buffer, sanitation_buffer, violent_buffer, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails, Percent_Poverty),
+                dplyr::select(fail_numeric, facility_type, Med_Rent, popdensity, winter, summer, Percent_Vacancy, quarter, rats_buffer, sanitation_buffer, violent_buffer, building_buffer, water_buffer, flooding_buffer, business_buffer, lagfail, prior_fails, Percent_Poverty, neighborhood),
                   family="binomial" (link="logit"))
 
-
-summary(model1)
+modelsummary(model1, 
+             statistic = c("std.error", "statistic", "p.value"),
+             stars = TRUE,
+             gof_map = c("nobs", "aic"),
+             shape = term  ~ statistic
+             ) %>%
+    scroll_box(width = "100%", height = "400px")
 
 aic1 <- data.frame(model1$aic) %>%
   rename(Model1_AIC = "model1.aic")
 
 ```
 
-### Model 2
+#### Model 2
 
-```{r run_model}
+As a test, we run a second model with only the statistically significant variables as predictors. We compare the AIC scores, where a lower score indicates a more effective model, and find that our model with all predictors has a lower score than the model with only statistically significant variables derived from the first model. We will therefore use that first model for the remainder of our analysis.
+
+```{r run_model2}
 
 model2 <- glm(fail_numeric ~ .,
                   data=modelTrain %>% 
@@ -899,6 +1009,8 @@ cbind(aic1, aic2) %>%
 ```
 
 ## Density of Probabilities Plot
+
+We plot the density of probabilities to observe different thresholds for pass or fail - the two density plots are similar but not identical, although there is not a strong distinction between the densities for pass and fail. If our model was very predictive, the highest densities for fail would be clustered around 1 and pass would be clustered around 0. Here, we see them somewhat more centered, although the densities for fail are clustered slightly closer to 1.
 
 ```{r testProbs}
 
@@ -932,7 +1044,13 @@ ggsave(filename = "images/model/dens_probs.png",
 testProbs <- 
   testProbs %>%
   mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+
+
 ```
+
+To observe the accuracy of our model, we create a confusion matrix with the threshold set to 0.5. We observe 1878 true negatives and 131 true positives, with 623 false negatives and 93 false positives. 
+
+More importantly, we consider the specificity and sensitivity scores. Our model has very high specificity, meaning that it does well to identify true negatives in our data. This is important for our app - there's less of a need to prioritize locations that we accurately predict will pass a food inspection. However, our sensitivity score is low, meaning the model struggles to predict true positives, or establishments that failed an inspection.
 
 ```{r confusion_matrix, warning=FALSE}
 caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
@@ -940,10 +1058,14 @@ caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome,
 
 ```
 
+We generate an ROC curve to consider the goodness of fit for our model and the relationship between true positives and false positives, and see that with an area under the curve of about 0.70, our model fits the data relatively well without overfitting our data (i.e. an AUC of 1).
+
 ```{r auc, message = FALSE, warning = FALSE}
 auc(testProbs$Outcome, testProbs$Probs)
 
 ```
+
+Our model appears to do better than a coin flip with 50/50 odds (the grey line) for identifying true positives.
 
 ```{r roc_curve, warning = FALSE, message = FALSE}
 ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
@@ -959,6 +1081,10 @@ ggsave(filename = "images/model/roc.png",
 
 
 ## Cross Validation
+
+We run cross validation tests on our model to examine outcomes for the ROC curve, sensitivity, and specificity across 50 different iterations.
+
+Both sensitivity and specificity measure how often we capture actual phenomena in the data. The closer each cross validation metric is to the mean, the more generalizable the model is - a tighter distribution is better in all three measurements.
 
 ```{r cv}
 ctrl <- trainControl(method = "cv", number = 50, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -977,6 +1103,8 @@ cvFit <- train(fail ~ .,
 
 cvFit
 ```
+
+We see that out model generalizes well for specificity but not as well for sensitivity. While there is also a wider spread for the ROC curve values, they never drop below 0.5 or get very close to 1. This beta development version of our model shows that we can more accurately and consistently predict when establishments will pass an inspection, but less accurately predict when an establishment will fail. However, for our use case, it is much more valuable to consider a range of possibilities.
 
 ```{r goodness_metrics, message = FALSE, warning = FALSE}
 dplyr::select(cvFit$resample, -Resample) %>%
@@ -1006,7 +1134,8 @@ ggsave(filename = "images/model/cv.png",
 ```
 
 ## Predictions
-2023 dependent, 2022 independent
+
+We care more about failure risk for individual points, which can be aggregated to a neighborhood level. Establishment owners will care more about what their business risk level is predicted to be, and health inspectors will care more about how to prioritize areas to conduct canvass inspections. To apply our model to new data, we use it on our prediction data, which includes 2023 results with 2022 independent variables. We then use it to categorize the probability of failure for each establishment into deciles. What this plot shows is that the probability of failure is between 10-40% for most establishments. 
 
 ```{r predictions}
 
@@ -1071,7 +1200,9 @@ ggsave(filename = "images/predict/bar.png",
 
 ## Facility Risk by Points
 
-```{r app map}
+Ultimately, our use case dictates that we need more granular results. After all, an inspection may not just result in pass or fail, but a pass with conditions - fixes that need to be made for the establishment to pass or else risk an actual failure. Our app takes advantage of the model's ability to generate the probability for points and leverages that into a powerful solution that shows outcomes for individual establishments. 
+
+```{r app setup, results = "hide"}
 
 wrigleyville <- neighborhoods %>%
   dplyr::filter(pri_neigh == "Wrigleyville")
@@ -1091,34 +1222,13 @@ wrigleyville_bounds_points <- results %>%
 
 wrigleyville_points <- results %>%
   st_crop(., wrigleyville)
-
-ggplot()+
-  geom_sf(data = bounds, fill = NA, color = "grey90")+
-  geom_sf(data = streets_wrigleyville, color = "grey70", lwd = 1)+
-  geom_sf(data = streets_wrigleyville, color = "white", fill = NA, lwd = .2)+
-  geom_sf(data = wrigleyville, fill = "lightblue", color = "slateblue1", lwd=1.5, alpha = .2)+
-  geom_sf(data = wrigleyville_bounds_points, aes(color = Probs), size = 3, alpha = .75)+
-  scale_color_viridis(option = "rocket", direction = -1)+
-  labs(title = "Wrigleyville",
-       subtitle = "Health Inspection Failure Risk",
-       color = "Fail\nChance",
-       caption = "powered by ia") +
-  theme(legend.position="bottom",
-        legend.title = element_text(size = 10, hjust= .5, vjust = 1),
-        panel.grid = element_blank(),
-        panel.background = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        plot.title=element_text(size=16,face="bold", color = "black"),
-        plot.subtitle = element_text(size=10,face="italic", color = "black"),
-        plot.caption=element_text(size=8, color = "black"))
-
-ggsave(filename = "images/app/wrigleyville.png",
-       width = 8)  
-
 ```
 
 ## Facility Risk by Neighborhoods
+
+For our app, we envision a city-wide view of Chicago. This map will provide users the average probability of failure for a neighborhood.
+
+While there are still gaps in our data due to training and testing, we see that failures tend to cluster in the South Side of Chicago. 
 
 ```{r app map2}
 results_neighborhoods <- results %>% 
@@ -1131,7 +1241,7 @@ results_neighborhood_map <- st_join(neighborhoods, results_neighborhoods)
   
 ggplot(data=results_neighborhood_map)+
   geom_sf(aes(fill = probability), color = NA)+
-  scale_fill_viridis(option = "rocket", direction = -1)+
+  scale_fill_viridis(limits = (c(0,1)), option = "rocket", direction = -1)+
   labs(title = "Predicted Fail Risk by Neighborhood",
        subtitle = "2023 (Average; Probability)",
        fill = "Probability",
@@ -1152,28 +1262,38 @@ ggsave(filename = "images/app/neighborhoods_predict_23.png",
 
 ### Comparison to 2023 Inspections Failures
 
+We can compare this to actual year-to-date results of 2023 failed inspections percentages, where we see that many failures occur in South Side neighborhoods, although in slightly different neighborhoods. However, these aggregated neighborhoods don't show the full story for our users.
+
 ```{r maps comp}
 
-ggplot(data=neighborhoods_count2023)+
-  geom_sf(aes(fill = Total), color = NA)+
-  scale_fill_viridis(option = "rocket", direction = -1)+
-  labs(title = "Failed Inspections by Neighborhood",
-       subtitle = "2023 (Count)",
-       fill = "Count",
-       caption = "Source: Chicago Data Portal") +
-  theme(panel.grid = element_blank(),
-        panel.background = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        plot.title=element_text(size=14,face="bold", color = "white"),
-        plot.subtitle = element_text(size=10,face="italic", color = "white"),
-        plot.caption=element_text(size=8, color = "white"), 
-        plot.background = element_rect(fill = 'black'))
+inspections_2023_map <- inspections_2023 %>%
+  group_by(neighborhood) %>%
+  summarize(Total = n(),
+            Failed = sum(fail_numeric)) %>%
+  mutate(fail_rate = Failed/Total*100) 
 
-ggsave(filename = "images/app/neighborhoods_23.png",
-       width = 8)  
+neighborhoods_2023<-st_join(neighborhoods,inspections_2023_map)
 
-ggplot(data=neighborhoods_count2023)+
+# ggplot(data=neighborhoods_2023)+
+#   geom_sf(aes(fill = Total), color = NA)+
+#   scale_fill_viridis(option = "rocket", direction = -1)+
+#   labs(title = "Failed Inspections by Neighborhood",
+#        subtitle = "2023 (Count)",
+#        fill = "Count",
+#        caption = "Source: Chicago Data Portal") +
+#   theme(panel.grid = element_blank(),
+#         panel.background = element_blank(),
+#         axis.ticks = element_blank(),
+#         axis.text = element_blank(),
+#         plot.title=element_text(size=14,face="bold", color = "white"),
+#         plot.subtitle = element_text(size=10,face="italic", color = "white"),
+#         plot.caption=element_text(size=8, color = "white"), 
+#         plot.background = element_rect(fill = 'black'))
+# 
+# ggsave(filename = "images/app/neighborhoods_23.png",
+#        width = 8)  
+
+ggplot(data=neighborhoods_2023)+
   geom_sf(aes(fill = fail_rate), color = NA)+
   scale_fill_viridis(option = "rocket", direction = -1)+
   labs(title = "Failed Inspections by Neighborhood",
@@ -1197,12 +1317,49 @@ ggsave(filename = "images/app/neighborhoods_23_pct.png",
 
 ```
 
+For enhanced functionality, we will implement the ability to zoom in on a neighborhood and see specific predicted failure risk levels by location. This mockup shows the neighborhood of Wrigleyville. The map shows that the risk level in Wrigleyiville ranges from near 0% to about 60% risk. Our app will include the ability to click on individual points to see business details, which can help business owners identify their own risk and help health inspectors see what establishments they should prioritize.
+
+```{r app map}
+ggplot()+
+  geom_sf(data = bounds, fill = NA, color = "grey90")+
+  geom_sf(data = streets_wrigleyville, color = "grey70", lwd = 1)+
+  geom_sf(data = streets_wrigleyville, color = "white", fill = NA, lwd = .2)+
+  geom_sf(data = wrigleyville, fill = "lightblue", color = "slateblue1", lwd=1.5, alpha = .4)+
+  geom_sf(data = wrigleyville_bounds_points, aes(color = Probs), size = 3, alpha = .75)+
+  scale_color_viridis(limits = (c(0,1)),option = "rocket", direction = -1)+
+  labs(title = "Wrigleyville",
+       subtitle = "Health Inspection Failure Risk",
+       color = "Fail\nChance",
+       caption = "powered by ia") +
+  theme(legend.position="bottom",
+        legend.title = element_text(size = 10, hjust= .5, vjust = 1),
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        plot.title=element_text(size=16,face="bold", color = "black"),
+        plot.subtitle = element_text(size=10,face="italic", color = "black"),
+        plot.caption=element_text(size=8, color = "black"))
+
+ggsave(filename = "images/app/wrigleyville.png",
+       width = 8)  
+
+```
+
 # Conclusion
+
+Ultimately, inspectate has the power to change a city's approach to food health and safety inspections. By incorporating the power of logistic regression and its ability to provide individual probabilities of failure, we can make prioritization easier for inspectors and give business owners better information to adjust their behaviors. The beta version of our model is effective at identifying restaurants that did not fail, which means that those establishments are less of a concern for the health and safety of Chicago residents. The range of possibilities that we provide through our model more accurately reflects the needs of our users and the true outcomes of a health inspection - it would be difficult to predict that a restaurant passes with certain conditions, so the probabilities better reflect the levels of risk given our internal and environmental predictors.
 
 ## Model Refinement 
 
-Incorporate more internal characteristics of restaurants
+As we look towards the future of inspectate, there are next steps we will pursue to take our model accuracy to the next level. We believe that we can make huge strides in the predictive power of our model by incorporating text mining and/or sentiment analysis on two key data points:
 
-Use text mining and sentiment analysis on online reviews and violations column data
+* The inspections data includes a list of violations in a field that the inspector freely types into. These responses are specific to the business and inspection, but by text mining this column, we can pull out insights about specific violation types that can inform passes with conditions or failures. These food establishment-specific violations may be very informative of circumstances that business owners face.
 
-Meeting the use case
+* We will also conduct text mining and sentiment analysis on recent Google or Yelp reviews of the establishment. While complaint-based inspections are not incorporated into our model, only canvass inspections, we believe that we can proactively identify establishments where customers have had experiences which would lead to the establishment failing a food inspection. This feature may greatly enhance the predictive power of our model in a constantly updated way, if scraped from the web.
+
+Additionally, we will incorporate internal characteristics of the establishment's building such as the age of the structure, which may be predictive for inspection failures (e.g. older buildings may have more structural issues).
+
+## Link to Presentation
+
+For more information, please visit the following link: https://youtu.be/-GZ0TLjlesM
